@@ -1,0 +1,21 @@
+# Competition data (never commit: large, and redistribution is against the rules)
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Experiment outputs
+runs/
+*.pt
+*.pth
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
