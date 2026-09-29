@@ -19,3 +19,6 @@ runs/
 .DS_Store
 .vscode/
 .idea/
+
+# Secrets (API keys etc.)
+.env
