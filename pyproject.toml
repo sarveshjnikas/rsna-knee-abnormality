@@ -1,0 +1,20 @@
+[project]
+name = "rsna-knee"
+version = "0.1.0"
+description = "Multi-label abnormality detection on knee MRI (RSNA Kaggle challenge)"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "seaborn",
+    "langdetect",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel",
+    "nbclient",
+    "nbformat",
+    "nbstripout>=0.9.1",
+]
