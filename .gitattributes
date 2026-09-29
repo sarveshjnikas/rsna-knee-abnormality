@@ -1,0 +1,3 @@
+# Strip notebook outputs on commit (they can contain competition data)
+*.ipynb filter=nbstripout
+*.ipynb diff=ipynb
