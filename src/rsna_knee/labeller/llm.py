@@ -159,7 +159,7 @@ def total_spend() -> tuple[float, int]:
 ACTIVE = ("validating", "in_progress", "finalizing", "cancelling")
 
 
-def _wait(client: OpenAI, batch_id: str, poll_seconds: int, stall_minutes: float = 10, nearly_done: float = 0.95):
+def _wait(client: OpenAI, batch_id: str, poll_seconds: int, stall_minutes: float = 4, nearly_done: float = 0.95):
     """Wait for a batch to end. A batch stuck near the end is cancelled: finished answers are kept,
     and the few stragglers are simply picked up by a later chunk."""
     last_count, last_change = -1, time.time()
