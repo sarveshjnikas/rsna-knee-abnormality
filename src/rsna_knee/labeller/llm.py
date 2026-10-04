@@ -156,14 +156,32 @@ def total_spend() -> tuple[float, int]:
     return spent, n_batch
 
 
+ACTIVE = ("validating", "in_progress", "finalizing", "cancelling")
+
+
+def _wait(client: OpenAI, batch_id: str, poll_seconds: int, stall_minutes: float = 10, nearly_done: float = 0.95):
+    """Wait for a batch to end. A batch stuck near the end is cancelled: finished answers are kept,
+    and the few stragglers are simply picked up by a later chunk."""
+    last_count, last_change = -1, time.time()
+    while (batch := client.batches.retrieve(batch_id)).status in ACTIVE:
+        counts = batch.request_counts
+        if counts.completed != last_count:
+            last_count, last_change = counts.completed, time.time()
+        stalled = time.time() - last_change > stall_minutes * 60
+        if batch.status == "in_progress" and stalled and counts.total and counts.completed >= nearly_done * counts.total:
+            print(f"{batch_id}: stalled at {counts.completed}/{counts.total}, cancelling to keep moving", flush=True)
+            client.batches.cancel(batch_id)
+        time.sleep(poll_seconds)
+    return batch
+
+
 def _wait_for_logged_batches(client: OpenAI, poll_seconds: int) -> None:
     """Finish and collect batches already in flight, so a restart never pays twice."""
     if not BATCH_LOG.exists():
         return
     for batch_id in json.loads(BATCH_LOG.read_text()):
-        while (batch := client.batches.retrieve(batch_id)).status in ("validating", "in_progress", "finalizing"):
-            time.sleep(poll_seconds)
-        if batch.status == "completed":
+        batch = _wait(client, batch_id, poll_seconds)
+        if batch.output_file_id:
             _collect(client, batch)
 
 
@@ -188,9 +206,8 @@ def run_batches(studies: pd.DataFrame, chunk_size: int = 350, poll_seconds: int 
             print(f"budget stop: spent ${spent:.2f}, next chunk would exceed ${BUDGET_USD:.0f}", flush=True)
             return
         batch_id = _submit(client, chunk, name=f"{int(time.time())}")
-        while (batch := client.batches.retrieve(batch_id)).status in ("validating", "in_progress", "finalizing"):
-            time.sleep(poll_seconds)
-        if batch.status == "completed":
+        batch = _wait(client, batch_id, poll_seconds)
+        if batch.status in ("completed", "cancelled") and batch.output_file_id:
             print(f"{batch_id}: +{_collect(client, batch)} labelled, {len(todo) - len(chunk)} to go", flush=True)
         elif batch.errors and any(e.code == "token_limit_exceeded" for e in batch.errors.data):
             time.sleep(poll_seconds)  # an earlier batch still holds the queue
@@ -203,5 +220,5 @@ def collect_batches() -> None:
     client = make_client()
     for batch_id in json.loads(BATCH_LOG.read_text()):
         batch = client.batches.retrieve(batch_id)
-        if batch.status == "completed":
+        if batch.output_file_id:
             print(f"{batch_id}: +{_collect(client, batch)} new")
