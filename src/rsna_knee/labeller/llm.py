@@ -116,52 +116,60 @@ def label_sync(studies: pd.DataFrame, workers: int = 8) -> list[dict]:
 # ------------------------------------------------------------------ batch
 
 
-def submit_batches(studies: pd.DataFrame, chunk_size: int = 1000) -> list[str]:
-    """Upload uncached studies as Batch API jobs (chunked to respect queue limits)."""
-    cached = load_cache()
-    todo = studies.loc[~studies["StudyInstanceUID"].isin(cached)]
-    client = make_client()
-    LABEL_DIR.mkdir(parents=True, exist_ok=True)
-
-    batch_ids = []
-    for start in range(0, len(todo), chunk_size):
-        chunk = todo.iloc[start : start + chunk_size]
-        path = LABEL_DIR / f"batch_input_{RUN_NAME}_{start:05d}.jsonl"
-        with path.open("w") as f:
-            for uid, report in zip(chunk["StudyInstanceUID"], chunk["Report"]):
-                line = {"custom_id": uid, "method": "POST", "url": "/v1/responses", "body": request_body(report)}
-                f.write(json.dumps(line, ensure_ascii=False) + "\n")
-        uploaded = client.files.create(file=path.open("rb"), purpose="batch")
-        batch = client.batches.create(input_file_id=uploaded.id, endpoint="/v1/responses", completion_window="24h")
-        batch_ids.append(batch.id)
-        print(f"submitted {batch.id}: {len(chunk)} requests")
-
+def _submit(client: OpenAI, chunk: pd.DataFrame, name: str) -> str:
+    path = LABEL_DIR / f"batch_input_{RUN_NAME}_{name}.jsonl"
+    with path.open("w") as f:
+        for uid, report in zip(chunk["StudyInstanceUID"], chunk["Report"]):
+            line = {"custom_id": uid, "method": "POST", "url": "/v1/responses", "body": request_body(report)}
+            f.write(json.dumps(line, ensure_ascii=False) + "\n")
+    uploaded = client.files.create(file=path.open("rb"), purpose="batch")
+    batch = client.batches.create(input_file_id=uploaded.id, endpoint="/v1/responses", completion_window="24h")
     previous = json.loads(BATCH_LOG.read_text()) if BATCH_LOG.exists() else []
-    BATCH_LOG.write_text(json.dumps(previous + batch_ids, indent=2))
-    return batch_ids
+    BATCH_LOG.write_text(json.dumps(previous + [batch.id], indent=2))
+    return batch.id
 
 
-def collect_batches(wait: bool = False, poll_seconds: int = 60) -> None:
-    """Download finished batches into the cache. With wait=True, poll until all finish."""
+def _collect(client: OpenAI, batch) -> int:
+    """Append a completed batch's answers to the cache; returns how many were new."""
+    cached, added = load_cache(), 0
+    for line in client.files.content(batch.output_file_id).text.splitlines():
+        result = json.loads(line)
+        uid = result["custom_id"]
+        if uid in cached or result.get("error") or result["response"]["status_code"] != 200:
+            continue
+        _append(_record(uid, result["response"]["body"], mode="batch"))
+        added += 1
+    return added
+
+
+def run_batches(studies: pd.DataFrame, chunk_size: int = 350, poll_seconds: int = 60) -> None:
+    """Label all uncached studies with the Batch API, one chunk at a time.
+
+    The organisation's queue holds at most ~900k enqueued tokens for this model,
+    so chunks run sequentially; a chunk rejected for that limit is retried.
+    """
+    LABEL_DIR.mkdir(parents=True, exist_ok=True)
     client = make_client()
-    batch_ids = json.loads(BATCH_LOG.read_text())
     while True:
-        cached = load_cache()
-        pending = []
-        for batch_id in batch_ids:
-            batch = client.batches.retrieve(batch_id)
-            counts = batch.request_counts
-            print(f"{batch_id}: {batch.status} ({counts.completed}/{counts.total} done, {counts.failed} failed)")
-            if batch.status != "completed":
-                if batch.status in ("validating", "in_progress", "finalizing"):
-                    pending.append(batch_id)
-                continue
-            for line in client.files.content(batch.output_file_id).text.splitlines():
-                result = json.loads(line)
-                uid = result["custom_id"]
-                if uid in cached or result.get("error") or result["response"]["status_code"] != 200:
-                    continue
-                _append(_record(uid, result["response"]["body"], mode="batch"))
-        if not (wait and pending):
+        todo = studies.loc[~studies["StudyInstanceUID"].isin(load_cache())]
+        if todo.empty:
             return
-        time.sleep(poll_seconds)
+        chunk = todo.iloc[:chunk_size]
+        batch_id = _submit(client, chunk, name=f"{int(time.time())}")
+        while (batch := client.batches.retrieve(batch_id)).status in ("validating", "in_progress", "finalizing"):
+            time.sleep(poll_seconds)
+        if batch.status == "completed":
+            print(f"{batch_id}: +{_collect(client, batch)} labelled, {len(todo) - len(chunk)} to go", flush=True)
+        elif batch.errors and any(e.code == "token_limit_exceeded" for e in batch.errors.data):
+            time.sleep(poll_seconds)  # an earlier batch still holds the queue
+        else:
+            raise RuntimeError(f"batch {batch_id} ended as {batch.status}: {batch.errors}")
+
+
+def collect_batches() -> None:
+    """Pull every completed batch in the log into the cache (safe to re-run)."""
+    client = make_client()
+    for batch_id in json.loads(BATCH_LOG.read_text()):
+        batch = client.batches.retrieve(batch_id)
+        if batch.status == "completed":
+            print(f"{batch_id}: +{_collect(client, batch)} new")

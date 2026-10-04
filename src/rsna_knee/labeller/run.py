@@ -1,8 +1,8 @@
 """Command line for the labeller.
 
     python -m rsna_knee.labeller.run gold --split dev   # label + score gold studies (sync)
-    python -m rsna_knee.labeller.run submit             # Batch API job for all uncached studies
-    python -m rsna_knee.labeller.run collect [--wait]   # pull finished batches into the cache
+    python -m rsna_knee.labeller.run batch              # Batch API, sequential chunks, until all cached
+    python -m rsna_knee.labeller.run collect            # pull any completed logged batches into the cache
     python -m rsna_knee.labeller.run export             # write soft labels for every cached study
 """
 
@@ -62,18 +62,17 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     gold_parser = sub.add_parser("gold")
     gold_parser.add_argument("--split", choices=["dev", "test"], default="dev")
-    sub.add_parser("submit")
-    collect_parser = sub.add_parser("collect")
-    collect_parser.add_argument("--wait", action="store_true")
+    sub.add_parser("batch")
+    sub.add_parser("collect")
     sub.add_parser("export")
     args = parser.parse_args()
 
     if args.command == "gold":
         gold(args.split)
-    elif args.command == "submit":
-        llm.submit_batches(pd.read_csv(RAW / "train.csv"))
+    elif args.command == "batch":
+        llm.run_batches(pd.read_csv(RAW / "train.csv"))
     elif args.command == "collect":
-        llm.collect_batches(wait=args.wait)
+        llm.collect_batches()
     elif args.command == "export":
         export()
 
