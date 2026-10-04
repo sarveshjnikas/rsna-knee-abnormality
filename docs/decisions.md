@@ -15,7 +15,12 @@ Each entry: the choice, why, the evidence, and what would change it.
 ## D3. The labeller reproduces the annotators' definitions, with "not addressed" as its own answer
 - **Why:** gold labels are image-based with strict thresholds (borderline = negative), so "mentioned in the report" is the wrong target. Silence means different things per finding (missing not at random).
 - **Evidence:** host confirmed labels are image-based and authoritative. Reports vs gold disagree (EDA: "moderate effusion" → gold 0). Forum: silent Baker's ≈ absent, silent synovitis ≈ 34% positive.
-- **How:** per label, LLM outputs positive / negative / uncertain / not_addressed + an evidence quote; a per-label mapping fitted on gold-dev turns states into probabilities.
+- **How:** per label, the LLM outputs one of positive / uncertain / below_threshold / absent / not_addressed, plus a short evidence quote; a mapping turns states into probabilities.
+
+## D13. Keep a severity tier ("below_threshold") instead of collapsing to negative
+- **Why:** AUC rewards ranking. "Small effusion" and "no effusion" are both label 0 by definition, but the first is more often rated positive by the annotators, so merging them destroys ranking information.
+- **Evidence (gold-dev 29):** v1 with a single "negative" scored 0.788 macro AUC. In v1, "negative" effusions were 36% gold-positive, and silence was 0% gold-positive for Baker's / Lateral OA / MCL / Contusion (ranked wrongly above "negative"). v2 with the split: **0.880**.
+- **Mapping v2:** positive 0.90, uncertain 0.70, below_threshold 0.30, absent 0.05, not_addressed 0.05. Designed on dev only; test 29 untouched.
 
 ## D4. Soft labels with binary cross-entropy
 - **Why:** BCE's minimum is at p = y, so a target of 0.3 teaches "30% likely", the honest answer for an unclear report. Hard 0/1 would inject confident errors.
@@ -48,5 +53,7 @@ Each entry: the choice, why, the evidence, and what would change it.
 ## D11. Walking skeleton first
 - **Why:** an end-to-end submission early surfaces packaging, runtime and offline-install problems while there is time to fix them.
 
-## Open
-- **D12. Labeller provider and model:** OpenAI (key available) vs Claude; decide by scoring two models on gold-dev before the full run.
+## D12. Labeller model: OpenAI gpt-6.1-sol, low reasoning effort, Batch API
+- **Why:** strong mid-tier model; key already available; Batch API halves the price.
+- **Evidence:** dev 29 at standard price cost $0.13 (≈350 output tokens/report); full 4,407-report batch projected ≈ $10.
+- **Engineering:** one request body for sync and batch; strict JSON schema (no free text to parse); every raw answer cached on disk keyed by study + prompt version, so re-runs are free and results never silently change.
