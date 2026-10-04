@@ -188,7 +188,7 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
     <span>Final submission <strong>22 Oct 2026, 23:59 UTC</strong></span>
     <span>Entry and team deadline <strong>15 Oct</strong></span>
     <span id="days-left">Days left <strong>18</strong></span>
-    <span>Map updated <strong>4 Oct, 23:30 IST</strong></span>
+    <span>Map updated <strong>4 Oct, 23:45 IST</strong></span>
   </div>
 </header>
 
@@ -199,15 +199,15 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
   </div>
   <div class="status-grid">
     <div class="ms"><span class="pill running">running</span><span class="name">M1 Labels</span><span class="when">Oct 4–6</span><span class="done-when">Labeller scored on gold dev; labels for all 4,349 non-gold studies; folds frozen.</span></div>
-    <div class="ms"><span class="pill running">running</span><span class="name">M2 Data</span><span class="when">Oct 5–7</span><span class="done-when">All studies preprocessed on Kaggle and moved to the GPU cluster.</span></div>
+    <div class="ms"><span class="pill ready">ready to move</span><span class="name">M2 Data</span><span class="when">Oct 5–7</span><span class="done-when">Kaggle part done: 4,407 studies, 0 errors. Moving the archives to the GPU cluster is the first step tomorrow.</span></div>
     <div class="ms"><span class="pill ready">code ready</span><span class="name">M3 First run</span><span class="when">Oct 7–9</span><span class="done-when">Fold-0 baseline trained; inference notebook submits; first leaderboard score.</span></div>
     <div class="ms"><span class="pill todo">to do</span><span class="name">M4 Improve</span><span class="when">Oct 10–17</span><span class="done-when">One change at a time, logged; 5 folds; ensemble.</span></div>
     <div class="ms"><span class="pill todo">to do</span><span class="name">M5 Final</span><span class="when">Oct 18–20</span><span class="done-when">Final models, runtime check, two final submissions chosen.</span></div>
   </div>
   <div class="live" aria-label="Jobs running tonight">
     <div class="eyebrow">Running tonight</div>
-    <div class="live-row"><span>Reports labelled by the LLM</span><div class="bar"><span style="width: 17%"></span></div><span class="num">757 / 4,407 · $1.63 spent</span></div>
-    <div class="live-row"><span>Kaggle preprocessing shards</span><div class="bar"><span style="width: 50%"></span></div><span class="num">3 notebooks running</span></div>
+    <div class="live-row"><span>Reports labelled by the LLM</span><div class="bar"><span style="width: 25%"></span></div><span class="num">1,106 / 4,407 · $2.33 spent</span></div>
+    <div class="live-row"><span>Kaggle preprocessing shards</span><div class="bar"><span style="width: 100%"></span></div><span class="num">3 / 3 done · 0 errors</span></div>
   </div>
 </section>
 
@@ -271,19 +271,19 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
         <!-- lane A nodes -->
         <a href="#c-eda"><g class="box"><rect x="24" y="42" width="190" height="68" rx="5"/><circle class="dot done" cx="200" cy="56" r="5"/><text class="t" x="38" y="66">Radiology reports</text><text class="s" x="38" y="84">4,407 studies</text><text class="s" x="38" y="99">9 languages</text></g></a>
         <a href="#c-labeller"><g class="box"><rect x="290" y="42" width="190" height="68" rx="5"/><circle class="dot running" cx="466" cy="56" r="5"/><text class="t" x="304" y="66">LLM labeller</text><text class="s" x="304" y="84">gpt-6.1-sol · Batch</text><text class="s" x="304" y="99">status per finding</text></g></a>
-        <a href="#c-labeller"><g class="box"><rect x="556" y="42" width="190" height="68" rx="5"/><circle class="dot done" cx="732" cy="56" r="5"/><text class="t" x="570" y="66">Status → probability</text><text class="s" x="570" y="84">mapping v2</text><text class="s" x="570" y="99">dev macro AUC 0.880</text></g></a>
+        <a href="#c-labeller"><g class="box"><rect x="556" y="42" width="190" height="68" rx="5"/><circle class="dot done" cx="732" cy="56" r="5"/><text class="t" x="570" y="66">Status → probability</text><text class="s" x="570" y="84">mapping v3</text><text class="s" x="570" y="99">dev macro AUC 0.885</text></g></a>
         <a href="#c-labeller"><g class="box"><rect x="822" y="42" width="190" height="68" rx="5"/><circle class="dot todo" cx="998" cy="56" r="5"/><text class="t" x="836" y="66">Soft labels</text><text class="s" x="836" y="84">4,349 studies × 12</text><text class="s" x="836" y="99">targets in [0, 1]</text></g></a>
 
         <!-- lane B nodes -->
         <a href="#c-preprocess"><g class="box"><rect x="24" y="188" width="190" height="68" rx="5"/><circle class="dot done" cx="200" cy="202" r="5"/><text class="t" x="38" y="212">DICOM series</text><text class="s" x="38" y="230">570 GB on Kaggle</text><text class="s" x="38" y="245">24,371 series</text></g></a>
-        <a href="#c-preprocess"><g class="box"><rect x="290" y="188" width="190" height="68" rx="5"/><circle class="dot running" cx="466" cy="202" r="5"/><text class="t" x="304" y="212">Preprocessing</text><text class="s" x="304" y="230">3 Kaggle CPU shards</text><text class="s" x="304" y="245">4 views per study</text></g></a>
+        <a href="#c-preprocess"><g class="box"><rect x="290" y="188" width="190" height="68" rx="5"/><circle class="dot done" cx="466" cy="202" r="5"/><text class="t" x="304" y="212">Preprocessing</text><text class="s" x="304" y="230">3 Kaggle CPU shards</text><text class="s" x="304" y="245">4 views per study</text></g></a>
         <a href="#c-model"><g class="box"><rect x="822" y="188" width="190" height="68" rx="5"/><circle class="dot ready" cx="998" cy="202" r="5"/><text class="t" x="836" y="212">KneeNet training</text><text class="s" x="836" y="230">EfficientNet-B0, 2.5D</text><text class="s" x="836" y="245">A100 · 5 folds</text></g></a>
 
         <!-- lane C nodes -->
         <a href="#c-validation"><g class="box"><rect x="24" y="364" width="190" height="68" rx="5"/><circle class="dot done" cx="200" cy="378" r="5"/><text class="t" x="38" y="388">Site proxy</text><text class="s" x="38" y="406">29 hospital groups</text><text class="s" x="38" y="421">language + template</text></g></a>
         <a href="#c-validation"><g class="box"><rect x="290" y="364" width="190" height="68" rx="5"/><circle class="dot ready" cx="466" cy="378" r="5"/><text class="t" x="304" y="388">5 CV folds</text><text class="s" x="304" y="406">grouped + stratified</text><text class="s" x="304" y="421">≈870 studies each</text></g></a>
         <a href="#c-validation"><g class="box"><rect x="556" y="364" width="190" height="68" rx="5"/><circle class="dot done" cx="732" cy="378" r="5"/><text class="t" x="570" y="388">Gold 58</text><text class="s" x="570" y="406">image-based labels</text><text class="s" x="570" y="421">dev 29 · test 29</text></g></a>
-        <a href="#c-submit"><g class="box"><rect x="822" y="364" width="190" height="68" rx="5"/><circle class="dot todo" cx="998" cy="378" r="5"/><text class="t" x="836" y="388">Kaggle submission</text><text class="s" x="836" y="406">images only, offline</text><text class="s" x="836" y="421">5-fold mean → CSV</text></g></a>
+        <a href="#c-submit"><g class="box"><rect x="822" y="364" width="190" height="68" rx="5"/><circle class="dot ready" cx="998" cy="378" r="5"/><text class="t" x="836" y="388">Kaggle submission</text><text class="s" x="836" y="406">images only, offline</text><text class="s" x="836" y="421">5-fold mean → CSV</text></g></a>
       </svg>
     </div>
     <figcaption>Teal is the training signal: report text becomes a label, and the label becomes the loss. Dashed amber is the gold yardstick: its dev half tunes the label mapping, and the whole 58 score the model without ever being trained on. Grey edges move images and folds. Click any box to jump to its section.</figcaption>
@@ -346,25 +346,25 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
     <div class="left">
       <div class="title-row"><h3>3 · Report labeller</h3><span class="pill running">running</span></div>
       <p>The LLM gets the official label definitions and returns, for each of the 12 findings, one of five states plus a short evidence quote. A fixed mapping then turns each state into a probability, which becomes the training target.</p>
-      <p>Version 1 used a single "negative" state and scored 0.788 on gold dev. Splitting it into "below threshold" (for example "small effusion") and "absent" raised that to 0.880, because AUC rewards ranking and the mild mentions carry ranking information.</p>
+      <p>Version 1 used a single "negative" state and scored 0.788 on gold dev. Splitting it into "below threshold" (for example "small effusion") and "absent" raised that to 0.880, because AUC rewards ranking and the mild mentions carry ranking information. Version 3 changes no LLM calls: when a report is silent on synovitis, the label borrows from effusion, which radiologists report far more readily.</p>
     </div>
     <div class="right">
       <dl class="facts">
         <dt>Model</dt><dd>gpt-6.1-sol · reasoning low · Batch API</dd>
         <dt>States</dt><dd>positive · uncertain · below_threshold · absent · not_addressed</dd>
-        <dt>Mapping v2</dt><dd>0.90 · 0.70 · 0.30 · 0.05 · 0.05</dd>
-        <dt>Gold dev macro AUC</dt><dd>v1 0.788 → v2 0.880</dd>
-        <dt>Weakest label (dev)</dt><dd>Synovitis 0.745 (18 of 29 reports never mention it)</dd>
+        <dt>Mapping</dt><dd>0.90 · 0.70 · 0.30 · 0.05 · 0.05, + silent synovitis from effusion (v3)</dd>
+        <dt>Gold dev macro AUC</dt><dd>v1 0.788 → v2 0.880 → v3 0.885</dd>
+        <dt>Synovitis (dev)</dt><dd>0.745 → 0.806 with v3 (18 of 29 reports never mention it)</dd>
         <dt>Cost</dt><dd>≈ $9 projected · hard stop $15</dd>
       </dl>
       <div class="files"><span>labeller/prompt.py</span><span>labeller/schema.py</span><span>labeller/llm.py</span><span>labeller/mapping.py</span></div>
-      <div class="chips"><a class="chip" href="#d2">D2</a><a class="chip" href="#d3">D3</a><a class="chip" href="#d4">D4</a><a class="chip" href="#d12">D12</a><a class="chip" href="#d13">D13</a><a class="chip" href="#d19">D19</a></div>
+      <div class="chips"><a class="chip" href="#d2">D2</a><a class="chip" href="#d3">D3</a><a class="chip" href="#d4">D4</a><a class="chip" href="#d12">D12</a><a class="chip" href="#d13">D13</a><a class="chip" href="#d19">D19</a><a class="chip" href="#d20">D20</a></div>
     </div>
   </article>
 
   <article class="dossier" id="c-preprocess">
     <div class="left">
-      <div class="title-row"><h3>4 · DICOM preprocessing</h3><span class="pill running">running on Kaggle</span></div>
+      <div class="title-row"><h3>4 · DICOM preprocessing</h3><span class="pill done">done on Kaggle</span></div>
       <p>Each study becomes one fixed-size array: 4 view slots × 24 slices × 256 × 256 pixels, plus a flag per slot saying whether that view exists. The same code runs on Kaggle for training and inside the submission notebook for the test set, so the model never sees images prepared differently.</p>
       <ul class="plain">
         <li>Slices are ordered by physical position from the DICOM header, because the file names are random.</li>
@@ -378,7 +378,7 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
         <dt>Per series</dt><dd>24 slices, even spacing</dd>
         <dt>Duplicates</dt><dd>keep the series with most slices</dd>
         <dt>Size</dt><dd>≈ 2.9 MB per study · ≈ 15 GB total</dd>
-        <dt>Speed (local)</dt><dd>≈ 1 s per study</dd>
+        <dt>Kaggle run</dt><dd>3 shards × 1,469 studies · ≈ 20 min each · 0 errors</dd>
       </dl>
       <div class="files"><span>preprocess/volume.py</span><span>preprocess/study.py</span><span>kaggle/push_preprocess.sh</span></div>
       <div class="chips"><a class="chip" href="#d7">D7</a><a class="chip" href="#d9">D9</a><a class="chip" href="#d14">D14</a><a class="chip" href="#d15">D15</a><a class="chip" href="#d18">D18</a></div>
@@ -407,13 +407,16 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
 
   <article class="dossier" id="c-submit">
     <div class="left">
-      <div class="title-row"><h3>6 · Kaggle submission</h3><span class="pill todo">to do</span></div>
+      <div class="title-row"><h3>6 · Kaggle submission</h3><span class="pill ready">dry run passed</span></div>
       <p>A Kaggle notebook with internet switched off. It preprocesses about 1,300 test studies with the same code, averages the 5 fold models, and writes <span class="mono">submission.csv</span>. The run must finish within 9 hours.</p>
     </div>
     <div class="right">
       <dl class="facts">
         <dt>Inputs</dt><dd>test images + series flags (no reports)</dd>
         <dt>Limit</dt><dd>≤ 9 h · no internet · 5 submissions a day</dd>
+        <dt>Dry run (untrained model)</dt><dd>offline paths, preprocessing, model load, CSV format all pass</dd>
+        <dt>Caught by the dry run</dt><dd>Kaggle uses Python 3.13; decoder wheels added</dd>
+        <dt>Safety</dt><dd>stops with an error if decoders fail or &gt; 5% of studies fail</dd>
       </dl>
       <div class="chips"><a class="chip" href="#d9">D9</a><a class="chip" href="#d11">D11</a></div>
     </div>
@@ -446,6 +449,7 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
     <details class="dec" id="d17"><summary><span class="id">D17</span><span class="what">Training recipe<span class="why">Standard and stable choices; the experiments go elsewhere.</span></span></summary><div class="body"><p>AdamW 3e-4, warm-up then cosine, bf16, gradient clip 1, 12 epochs. Flips are label-safe because the labels are anatomical. View dropout matches test studies with missing views.</p></div></details>
     <details class="dec" id="d18"><summary><span class="id">D18</span><span class="what">Kaggle preprocesses, a GPU cluster trains, Kaggle submits<span class="why">Move 15 GB instead of 570 GB, and train on A100s.</span></span></summary><div class="body"><p>Three Kaggle CPU notebooks run in parallel, one shard each.</p></div></details>
     <details class="dec" id="d19"><summary><span class="id">D19</span><span class="what">Labelling spend is capped and never paid twice<span class="why">$19 of credit, hard stop at $15.</span></span></summary><div class="body"><p>OpenAI's Tier-1 queue holds 900k tokens for this model, so the reports go through in sequential chunks of 350. A restart first collects batches already in flight.</p></div></details>
+    <details class="dec" id="d20"><summary><span class="id">D20</span><span class="what">Silent synovitis borrows from effusion<span class="why">Radiologists report effusion readily and synovitis rarely, and the two travel together.</span></span></summary><div class="body"><p><b>How:</b> only when the report says nothing about synovitis: p = 0.05 + 0.6 × p(effusion). Explicit statements are never overridden.</p><p><b>Evidence:</b> forum: P(synovitis | effusion) 0.63 vs 0.22. Gold dev: Synovitis 0.745 → 0.806, macro 0.880 → 0.885. The rule was decided before looking, and the macro gain alone is within noise.</p></div></details>
   </div>
 </section>
 
@@ -459,7 +463,8 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
       <thead><tr><th>ID</th><th>Change</th><th>Gold dev 29</th><th>Gold test 29</th><th>Note</th></tr></thead>
       <tbody>
         <tr><td class="mono">L1</td><td>Labeller v1: 4 states, one mapping</td><td class="n">0.788</td><td class="n">–</td><td>silence ranked above "negative"</td></tr>
-        <tr><td class="mono">L2</td><td>Labeller v2: + below threshold, absent vs not addressed</td><td class="n best">0.880</td><td class="n">–</td><td>Synovitis weakest at 0.745</td></tr>
+        <tr><td class="mono">L2</td><td>Labeller v2: + below threshold, absent vs not addressed</td><td class="n">0.880</td><td class="n">–</td><td>Synovitis weakest at 0.745</td></tr>
+        <tr><td class="mono">L3</td><td>Mapping v3: silent synovitis from effusion (no new LLM calls)</td><td class="n best">0.885</td><td class="n">–</td><td>Synovitis 0.806</td></tr>
       </tbody>
     </table>
   </div>
