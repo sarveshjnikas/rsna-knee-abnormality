@@ -59,3 +59,30 @@ def make_folds(
         fold_size[fold] += group_size[g]
 
     return pd.Series(fold_of_group[group_of_row], index=df.index, name="fold")
+
+
+def main() -> None:
+    """Freeze CV folds over the pseudo-labelled studies (gold studies excluded) -> data/splits/folds.csv."""
+    import argparse
+
+    from rsna_knee.config import INTERIM, LABEL_DIR, LABELS, SPLITS
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--labels", default=str(LABEL_DIR / "labels_v2_gpt-6.1-sol.csv"))
+    parser.add_argument("--k", type=int, default=5)
+    args = parser.parse_args()
+
+    labels = pd.read_csv(args.labels)
+    sites = pd.read_csv(INTERIM / "site_proxy.csv")
+    gold = set(pd.read_csv(SPLITS / "gold_split.csv")["StudyInstanceUID"])
+    studies = labels.merge(sites[["StudyInstanceUID", "site_proxy"]], on="StudyInstanceUID")
+    studies = studies[~studies["StudyInstanceUID"].isin(gold)].reset_index(drop=True)
+
+    studies["fold"] = make_folds(studies, LABELS, "site_proxy", k=args.k)
+    studies[["StudyInstanceUID", "site_proxy", "fold"]].to_csv(SPLITS / "folds.csv", index=False)
+    print(f"wrote {SPLITS / 'folds.csv'}: {studies['fold'].value_counts().sort_index().tolist()}")
+    print(studies.groupby("fold")[LABELS].mean().round(3).T.to_string())
+
+
+if __name__ == "__main__":
+    main()
