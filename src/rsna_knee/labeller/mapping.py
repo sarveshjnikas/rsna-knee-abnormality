@@ -29,9 +29,18 @@ def status_table(records: dict[str, dict]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["StudyInstanceUID", *LABELS])
 
 
-def soft_labels(statuses: pd.DataFrame, mapping: dict[Status, float] = STATUS_PROBABILITY) -> pd.DataFrame:
+# v3: reports rarely mention synovitis, but it travels with effusion (forum: P(syn | effusion) 0.63
+# vs 0.22). When a report is silent on synovitis, it inherits a share of the effusion probability.
+# Explicit synovitis statements are never overridden. Gold dev: Synovitis AUC 0.745 -> 0.806.
+SYNOVITIS_FROM_EFFUSION = 0.6
+
+
+def soft_labels(statuses: pd.DataFrame, mapping: dict[Status, float] = STATUS_PROBABILITY,
+                synovitis_from_effusion: float = SYNOVITIS_FROM_EFFUSION) -> pd.DataFrame:
     probabilities = {status.value: p for status, p in mapping.items()}
     out = statuses[["StudyInstanceUID"]].copy()
     for label in LABELS:
         out[label] = statuses[label].map(probabilities)
+    silent = statuses["Synovitis"] == Status.NOT_ADDRESSED.value
+    out.loc[silent, "Synovitis"] = probabilities[Status.NOT_ADDRESSED.value] + synovitis_from_effusion * out.loc[silent, "Effusion"]
     return out

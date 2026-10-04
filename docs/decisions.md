@@ -88,3 +88,8 @@ Each entry: the choice, why, the evidence, and what would change it.
 ## D19. Labelling spend is capped and never paid twice
 - Hard stop at $15 total (credit available: $19). Every answer is cached by study and prompt version; restarts first collect batches already in flight.
 - OpenAI's Tier-1 queue holds 900k tokens for this model, so batches run as sequential chunks of 350 reports.
+
+## D20. Silent synovitis inherits a share of the effusion probability
+- **Why:** radiologists report effusion readily and synovitis rarely, and the two travel together. Silence about synovitis is therefore uninformative, not negative.
+- **How:** only when the report does not address synovitis: p = 0.05 + 0.6 × p(effusion). An explicit synovitis statement is never overridden.
+- **Evidence:** forum: P(synovitis | effusion) 0.63 vs 0.22 on gold. Gold dev: Synovitis AUC 0.745 → 0.806, macro 0.880 → 0.885 (decided before looking; the macro gain alone is within noise).

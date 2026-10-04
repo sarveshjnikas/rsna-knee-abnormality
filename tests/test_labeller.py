@@ -57,3 +57,13 @@ def test_auc_perfect_ranking():
     gold = pd.DataFrame({"StudyInstanceUID": ["a", "b"], **{l: [1, 0] for l in LABELS}})
     pred = pd.DataFrame({"StudyInstanceUID": ["a", "b"], **{l: [0.9, 0.1] for l in LABELS}})
     assert auc_table(gold, pred)["macro"] == 1.0
+
+
+def test_silent_synovitis_follows_effusion_but_explicit_does_not():
+    rows = []
+    for syn, eff in [("not_addressed", "positive"), ("not_addressed", "absent"), ("absent", "positive")]:
+        row = {"StudyInstanceUID": f"{syn}-{eff}", **{l: "absent" for l in LABELS}}
+        row.update({"Synovitis": syn, "Effusion": eff})
+        rows.append(row)
+    syn = soft_labels(pd.DataFrame(rows))["Synovitis"].tolist()
+    assert syn[0] > syn[1] and syn[2] == syn[1] - 0.6 * 0.05
