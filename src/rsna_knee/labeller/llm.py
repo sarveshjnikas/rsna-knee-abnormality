@@ -26,6 +26,8 @@ MAX_OUTPUT_TOKENS = 4000
 PRICE_STANDARD = (2.00, 0.10, 10.00)
 PRICE_BATCH = tuple(p / 2 for p in PRICE_STANDARD)
 
+BUDGET_USD = 15.0  # hard stop for all labelling spend (sync + batch, every prompt version)
+
 RUN_NAME = f"{PROMPT_VERSION}_{MODEL}"
 CACHE_PATH = LABEL_DIR / f"raw_{RUN_NAME}.jsonl"
 BATCH_LOG = LABEL_DIR / f"batches_{RUN_NAME}.json"
@@ -142,19 +144,49 @@ def _collect(client: OpenAI, batch) -> int:
     return added
 
 
+def total_spend() -> tuple[float, int]:
+    """USD spent so far across every cached run, and the number of batch answers it covers."""
+    spent, n_batch = 0.0, 0
+    for path in LABEL_DIR.glob("raw_*.jsonl"):
+        for record in load_cache(path).values():
+            if record.get("usage"):
+                batch = record["mode"] == "batch"
+                spent += cost_usd(record["usage"], PRICE_BATCH if batch else PRICE_STANDARD)
+                n_batch += batch
+    return spent, n_batch
+
+
+def _wait_for_logged_batches(client: OpenAI, poll_seconds: int) -> None:
+    """Finish and collect batches already in flight, so a restart never pays twice."""
+    if not BATCH_LOG.exists():
+        return
+    for batch_id in json.loads(BATCH_LOG.read_text()):
+        while (batch := client.batches.retrieve(batch_id)).status in ("validating", "in_progress", "finalizing"):
+            time.sleep(poll_seconds)
+        if batch.status == "completed":
+            _collect(client, batch)
+
+
 def run_batches(studies: pd.DataFrame, chunk_size: int = 350, poll_seconds: int = 60) -> None:
     """Label all uncached studies with the Batch API, one chunk at a time.
 
     The organisation's queue holds at most ~900k enqueued tokens for this model,
     so chunks run sequentially; a chunk rejected for that limit is retried.
+    Stops before any chunk that could take total spend past BUDGET_USD.
     """
     LABEL_DIR.mkdir(parents=True, exist_ok=True)
     client = make_client()
+    _wait_for_logged_batches(client, poll_seconds)
     while True:
         todo = studies.loc[~studies["StudyInstanceUID"].isin(load_cache())]
         if todo.empty:
             return
         chunk = todo.iloc[:chunk_size]
+        spent, n_batch = total_spend()
+        per_study = spent / max(n_batch, 1) if n_batch else 0.005
+        if spent + 1.5 * per_study * len(chunk) > BUDGET_USD:
+            print(f"budget stop: spent ${spent:.2f}, next chunk would exceed ${BUDGET_USD:.0f}", flush=True)
+            return
         batch_id = _submit(client, chunk, name=f"{int(time.time())}")
         while (batch := client.batches.retrieve(batch_id)).status in ("validating", "in_progress", "finalizing"):
             time.sleep(poll_seconds)
