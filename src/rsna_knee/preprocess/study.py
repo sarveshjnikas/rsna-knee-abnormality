@@ -10,9 +10,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from rsna_knee.preprocess.volume import IMAGE_SIZE, N_SLICES, load_volume
-
-SLOTS = ("sag_FS", "cor_FS", "axi_FS", "sag_noFS")
+from rsna_knee.config import IMAGE_SIZE, N_SLICES, SLOTS
+from rsna_knee.preprocess.volume import load_volume
 
 
 def slot_of(plane: str, fluid_sensitive: int) -> str:

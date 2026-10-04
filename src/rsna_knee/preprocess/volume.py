@@ -6,8 +6,8 @@ import cv2
 import numpy as np
 import pydicom
 
-N_SLICES = 24
-IMAGE_SIZE = 256
+from rsna_knee.config import IMAGE_SIZE, N_SLICES
+
 INTENSITY_PERCENTILES = (1.0, 99.5)
 
 

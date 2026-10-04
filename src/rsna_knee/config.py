@@ -25,3 +25,8 @@ LABELS = [
     "Contusion",
     "Fracture",
 ]
+
+# Shape contract between preprocessing (writes it) and the model (reads it).
+SLOTS = ("sag_FS", "cor_FS", "axi_FS", "sag_noFS")  # plane x sequence type, see preprocess/study.py
+N_SLICES = 24  # slices sampled evenly across each series
+IMAGE_SIZE = 256  # pixels per side after cropping to the body and padding to square

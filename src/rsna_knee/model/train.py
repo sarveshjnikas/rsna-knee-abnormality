@@ -19,11 +19,9 @@ import torch
 from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 
-from rsna_knee.config import LABEL_DIR, LABELS, RAW, SPLITS
+from rsna_knee.config import LABEL_DIR, LABELS, N_SLICES, RAW, SLOTS, SPLITS
 from rsna_knee.model.data import StudyDataset, augment
 from rsna_knee.model.network import KneeNet
-from rsna_knee.preprocess.study import SLOTS
-from rsna_knee.preprocess.volume import N_SLICES
 
 
 def macro_auc(targets: np.ndarray, scores: np.ndarray) -> float:

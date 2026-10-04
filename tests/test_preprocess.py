@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from rsna_knee.preprocess.study import SLOTS, choose_series, slot_of
+from rsna_knee.config import SLOTS
+from rsna_knee.preprocess.study import choose_series, slot_of
 from rsna_knee.preprocess.volume import crop_to_body, normalise, pick_indices, to_square
 
 
