@@ -57,3 +57,34 @@ Each entry: the choice, why, the evidence, and what would change it.
 - **Why:** strong mid-tier model; key already available; Batch API halves the price.
 - **Evidence:** dev 29 at standard price cost $0.13 (≈350 output tokens/report); full 4,407-report batch projected ≈ $10.
 - **Engineering:** one request body for sync and batch; strict JSON schema (no free text to parse); every raw answer cached on disk keyed by study + prompt version, so re-runs are free and results never silently change.
+
+## D14. Four input slots chosen by plane × fluid-sensitive flag; missing views are masked
+- **Slots:** sag_FS, cor_FS, axi_FS, sag_noFS. FS = Fluid_Sensitive 1, so an unseen flag combination at test time still maps to a slot.
+- **Evidence:** FS views present in 94–100% of studies; sag_noFS in 97%. cor_noFS (77%) and axi_noFS (19%) are left out of v1.
+- **Missing:** a missing slot is zeros plus `present = False`; the model ignores it (tested: changing a missing view's pixels does not change the output).
+- **Duplicates:** keep the series with the most slices (best coverage).
+
+## D15. Preprocessing: 24 slices, crop to body, 256 px square, per-series intensity scaling
+- **24 slices spread evenly** across each series: fixed shape for batching; median series has 30.
+- **Crop to the body** (one box per series from the max projection): a 3D axial series is 640 × 1280 px with the knee small in the middle.
+- **Pad to square, then resize to 256**: keeps the aspect ratio.
+- **Per-series percentile scaling (1st–99.5th → 0–255):** MRI intensities have no fixed units across scanners.
+- **Output:** uint8, compressed, ≈ 2.9 MB per study, ≈ 15 GB total.
+
+## D16. Model: shared 2D encoder over 2.5D slices, attention over slices, fusion over views
+- **2.5D input:** each slice with its two neighbours as the 3 RGB channels, so the ImageNet encoder gets some through-plane context without a 3D network.
+- **Shared encoder** (EfficientNet-B0, ImageNet weights) for every slice of every view: one set of weights, 4 × 24 = 96 slices per study.
+- **Attention pooling per view:** a finding sits in a few slices, so a learned weighting beats averaging.
+- **Fusion:** view-type embedding + one transformer layer across views, then a masked mean and a 12-output head.
+
+## D17. Training recipe
+- BCE on soft targets; AdamW (lr 3e-4, weight decay 0.01); 1-epoch warm-up then cosine; bf16; gradient clip 1.0; 12 epochs; batch 8 studies.
+- **Augmentation:** horizontal flip (labels are anatomical, a mirrored left knee is a right knee), zoom crop 0.85–1, per-view intensity gain/offset, view dropout 0.15 (test studies can lack views).
+- **Checkpoint** chosen on the fold's validation AUC against pseudo-labels; the 58 gold studies are never trained on and are reported as an honest check.
+
+## D18. Compute split: Kaggle CPU preprocesses, the GPU cluster trains, Kaggle GPU submits
+- **Why:** the 570 GB of DICOMs already sit on Kaggle, so only the 15 GB of arrays move. Cluster A100s train. The submission must run as a Kaggle notebook anyway, with the same preprocessing code.
+
+## D19. Labelling spend is capped and never paid twice
+- Hard stop at $15 total (credit available: $19). Every answer is cached by study and prompt version; restarts first collect batches already in flight.
+- OpenAI's Tier-1 queue holds 900k tokens for this model, so batches run as sequential chunks of 350 reports.
