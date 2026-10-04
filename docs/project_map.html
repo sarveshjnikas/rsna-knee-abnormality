@@ -1,0 +1,515 @@
+<title>RSNA Knee Project Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: a reading-room worklist. Header and status strip, one wide pipeline figure,
+   then one dossier per component in pipeline order, the decision log, scores and the runbook. */
+:root {
+  --paper: #f3f5f6;
+  --panel: #ffffff;
+  --ink: #152029;
+  --muted: #5a6774;
+  --rule: #d7dee3;
+  --rule-strong: #a9b5bf;
+  --signal: #0a7480;   /* the training signal: report -> label -> loss */
+  --gold: #9a6512;     /* the gold yardstick: 58 image-labelled studies */
+  --done: #2f7d4e;
+  --running: #2160a8;
+  --todo: #8995a1;
+  --risk: #b03a3a;
+  --signal-soft: rgba(10, 116, 128, 0.09);
+  --gold-soft: rgba(154, 101, 18, 0.10);
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --step--1: 0.8125rem;
+  --step-0: 0.9375rem;
+  --step-1: 1.125rem;
+  --step-2: 1.5rem;
+  --step-3: 2.25rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1418; --panel: #141c21; --ink: #e4eaed; --muted: #93a0ab; --rule: #24313a; --rule-strong: #3b4a55;
+    --signal: #47bcc6; --gold: #e0a44e; --done: #5dbb82; --running: #6fa8ea; --todo: #6b7884; --risk: #e07070;
+    --signal-soft: rgba(71, 188, 198, 0.12); --gold-soft: rgba(224, 164, 78, 0.12);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1418; --panel: #141c21; --ink: #e4eaed; --muted: #93a0ab; --rule: #24313a; --rule-strong: #3b4a55;
+  --signal: #47bcc6; --gold: #e0a44e; --done: #5dbb82; --running: #6fa8ea; --todo: #6b7884; --risk: #e07070;
+  --signal-soft: rgba(71, 188, 198, 0.12); --gold-soft: rgba(224, 164, 78, 0.12);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: var(--f-body); font-size: var(--step-0); line-height: 1.55; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; display: grid; gap: 44px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 700; line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: var(--step-3); letter-spacing: -0.01em; }
+h2 { font-size: var(--step-2); }
+h3 { font-size: var(--step-1); font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+a { color: var(--signal); }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 2px; }
+.eyebrow { font-family: var(--f-mono); font-size: var(--step--1); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--f-mono); font-size: 0.9em; }
+.muted { color: var(--muted); }
+section { display: grid; gap: 18px; }
+.section-head { display: grid; gap: 6px; border-top: 1px solid var(--rule-strong); padding-top: 14px; }
+
+/* header */
+header { display: grid; gap: 14px; }
+.pitch { font-size: var(--step-1); line-height: 1.5; max-width: 72ch; }
+.pitch b { color: var(--signal); font-weight: 600; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 22px; font-family: var(--f-mono); font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.meta strong { color: var(--ink); font-weight: 500; }
+
+/* status */
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.ms { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.ms .when { font-family: var(--f-mono); font-size: var(--step--1); color: var(--muted); }
+.ms .name { font-weight: 600; }
+.ms .done-when { font-size: var(--step--1); color: var(--muted); }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--f-mono); font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.pill.ready::before, .pill.todo::before { background: transparent; border: 1.5px solid currentColor; }
+.pill.done { color: var(--done); } .pill.running { color: var(--running); } .pill.ready { color: var(--running); } .pill.todo { color: var(--todo); }
+.live { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 16px; display: grid; gap: 10px; }
+.live-row { display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.bar { height: 8px; background: var(--rule); border-radius: 4px; overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--running); }
+.live-row .num { font-family: var(--f-mono); font-size: var(--step--1); font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; }
+
+/* figure */
+figure { margin: 0; display: grid; gap: 10px; }
+.fig-scroll { overflow-x: auto; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 10px; }
+.fig-scroll svg { display: block; width: 100%; min-width: 820px; height: auto; color: var(--ink); }
+figcaption { font-size: var(--step--1); color: var(--muted); max-width: 90ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: var(--step--1); color: var(--muted); }
+.legend .sw { display: inline-block; width: 22px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
+.sw.sig { border-color: var(--signal); } .sw.gold { border-color: var(--gold); border-top-style: dashed; } .sw.ink { border-color: var(--rule-strong); }
+
+svg .box rect { fill: var(--panel); stroke: var(--rule-strong); stroke-width: 1.2; }
+svg .box:hover rect, svg a:focus-visible .box rect { stroke: var(--signal); stroke-width: 2; }
+svg .box .t { font-family: var(--f-body); font-weight: 600; font-size: 13.5px; fill: var(--ink); }
+svg .box .s { font-family: var(--f-mono); font-size: 11px; fill: var(--muted); }
+svg .lane { font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.08em; fill: var(--muted); }
+svg .lbl { font-family: var(--f-body); font-size: 11px; fill: var(--muted); }
+svg .lbl.sig { fill: var(--signal); font-weight: 500; }
+svg .lbl.gold { fill: var(--gold); font-weight: 500; }
+svg .e { fill: none; stroke-width: 1.6; }
+svg .e.ink { stroke: var(--rule-strong); }
+svg .e.sig { stroke: var(--signal); stroke-width: 2.4; }
+svg .e.gold { stroke: var(--gold); stroke-dasharray: 5 4; }
+svg .halo { fill: none; stroke: var(--panel); stroke-width: 7; }
+svg .m-ink { fill: var(--rule-strong); } svg .m-sig { fill: var(--signal); } svg .m-gold { fill: var(--gold); }
+svg .dot.done { fill: var(--done); } svg .dot.running { fill: var(--running); }
+svg .dot.ready { fill: var(--panel); stroke: var(--running); stroke-width: 1.6; }
+svg .dot.todo { fill: var(--panel); stroke: var(--todo); stroke-width: 1.6; }
+
+/* dossiers */
+.dossier { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px 32px; padding-block: 18px; border-top: 1px solid var(--rule); scroll-margin-top: 16px; }
+.dossier:target { background: linear-gradient(var(--signal-soft), var(--signal-soft)); }
+.dossier .left { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.dossier .right { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.dossier .title-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+dl.facts { margin: 0; display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr); gap: 6px 14px; font-size: var(--step--1); }
+dl.facts dt { color: var(--muted); }
+dl.facts dd { margin: 0; font-family: var(--f-mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.files { font-family: var(--f-mono); font-size: var(--step--1); color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--f-mono); font-size: 0.75rem; text-decoration: none; color: var(--signal); border: 1px solid var(--signal); border-radius: 3px; padding: 1px 6px; background: var(--signal-soft); }
+ul.plain { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; max-width: 68ch; }
+
+/* decisions */
+.decisions { display: grid; gap: 0; border-top: 1px solid var(--rule); }
+details.dec { border-bottom: 1px solid var(--rule); scroll-margin-top: 16px; }
+details.dec:target { background: var(--gold-soft); }
+details.dec summary { cursor: pointer; list-style: none; display: grid; grid-template-columns: 3.2rem minmax(0, 1fr); gap: 10px; padding: 10px 4px; }
+details.dec summary::-webkit-details-marker { display: none; }
+details.dec summary .id { font-family: var(--f-mono); font-size: var(--step--1); color: var(--gold); padding-top: 2px; }
+details.dec summary .what { font-weight: 600; }
+details.dec summary .why { display: block; font-weight: 400; color: var(--muted); font-size: var(--step--1); }
+details.dec[open] summary .what { color: var(--signal); }
+details.dec .body { padding: 0 4px 14px calc(3.2rem + 14px); display: grid; gap: 6px; font-size: var(--step--1); max-width: 80ch; }
+details.dec .body b { font-weight: 600; }
+
+/* tables */
+.table-scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: var(--step--1); font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-family: var(--f-mono); font-weight: 500; font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+td.n { font-family: var(--f-mono); text-align: right; white-space: nowrap; }
+td.best { color: var(--signal); font-weight: 600; }
+
+/* runbook */
+ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 8px; }
+ol.steps li { counter-increment: step; display: grid; grid-template-columns: 2rem 4.2rem minmax(0, 1fr); gap: 10px; align-items: baseline; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 9px 12px; }
+ol.steps li::before { content: counter(step); font-family: var(--f-mono); color: var(--muted); }
+.who { font-family: var(--f-mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.who.you { color: var(--gold); } .who.me { color: var(--signal); }
+ol.steps code { font-family: var(--f-mono); font-size: 0.85em; overflow-wrap: anywhere; }
+
+/* interview */
+.qa { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.qa div { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.qa .q { font-weight: 600; }
+.qa .a { font-size: var(--step--1); color: var(--muted); }
+blockquote { margin: 0; padding: 14px 18px; border-left: 3px solid var(--signal); background: var(--signal-soft); font-size: var(--step-1); max-width: 76ch; }
+
+footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid var(--rule); padding-top: 12px; }
+
+@media (max-width: 760px) {
+  .dossier { grid-template-columns: minmax(0, 1fr); }
+  dl.facts { grid-template-columns: minmax(0, 1fr); gap: 0 0; }
+  dl.facts dd { margin-bottom: 6px; }
+  .live-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .live-row .bar { grid-column: 1 / -1; grid-row: 2; }
+  ol.steps li { grid-template-columns: 1.6rem minmax(0, 1fr); }
+  ol.steps li .who { grid-column: 2; }
+  ol.steps li .txt { grid-column: 2; }
+  details.dec .body { padding-left: 4px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bar span { transition: width 600ms ease; }
+}
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">RSNA Knee Abnormality Detection · Kaggle 2026 · 12 findings · metric: macro ROC AUC</div>
+  <h1>RSNA Knee Project Map</h1>
+  <p class="pitch">Only 58 of 4,407 training studies have real labels. So an LLM reads the other studies' radiology reports and turns them into <b>soft labels that copy the annotators' image-based rules</b>, checked against a held-out half of the gold set. A 2.5D CNN then learns those labels from the fat-suppressed and anatomy views, with folds grouped by hospital, because the test set likely contains hospitals the training set never saw.</p>
+  <div class="meta">
+    <span>Final submission <strong>22 Oct 2026, 23:59 UTC</strong></span>
+    <span>Entry and team deadline <strong>15 Oct</strong></span>
+    <span id="days-left">Days left <strong>18</strong></span>
+    <span>Map updated <strong>4 Oct, 23:30 IST</strong></span>
+  </div>
+</header>
+
+<section aria-labelledby="where">
+  <div class="section-head">
+    <div class="eyebrow">Status</div>
+    <h2 id="where">Where the project stands</h2>
+  </div>
+  <div class="status-grid">
+    <div class="ms"><span class="pill running">running</span><span class="name">M1 Labels</span><span class="when">Oct 4–6</span><span class="done-when">Labeller scored on gold dev; labels for all 4,349 non-gold studies; folds frozen.</span></div>
+    <div class="ms"><span class="pill running">running</span><span class="name">M2 Data</span><span class="when">Oct 5–7</span><span class="done-when">All studies preprocessed on Kaggle and moved to the GPU cluster.</span></div>
+    <div class="ms"><span class="pill ready">code ready</span><span class="name">M3 First run</span><span class="when">Oct 7–9</span><span class="done-when">Fold-0 baseline trained; inference notebook submits; first leaderboard score.</span></div>
+    <div class="ms"><span class="pill todo">to do</span><span class="name">M4 Improve</span><span class="when">Oct 10–17</span><span class="done-when">One change at a time, logged; 5 folds; ensemble.</span></div>
+    <div class="ms"><span class="pill todo">to do</span><span class="name">M5 Final</span><span class="when">Oct 18–20</span><span class="done-when">Final models, runtime check, two final submissions chosen.</span></div>
+  </div>
+  <div class="live" aria-label="Jobs running tonight">
+    <div class="eyebrow">Running tonight</div>
+    <div class="live-row"><span>Reports labelled by the LLM</span><div class="bar"><span style="width: 17%"></span></div><span class="num">757 / 4,407 · $1.63 spent</span></div>
+    <div class="live-row"><span>Kaggle preprocessing shards</span><div class="bar"><span style="width: 50%"></span></div><span class="num">3 notebooks running</span></div>
+  </div>
+</section>
+
+<section aria-labelledby="pipeline">
+  <div class="section-head">
+    <div class="eyebrow">The whole system</div>
+    <h2 id="pipeline">Pipeline</h2>
+  </div>
+  <figure>
+    <div class="fig-scroll">
+      <svg viewBox="0 0 1040 488" role="img" aria-label="Reports become soft labels through an LLM and a status mapping; DICOM series become fixed arrays on Kaggle; the 2.5D model trains on a GPU cluster with hospital-grouped folds; 58 gold studies tune the mapping on one half and give an honest score; the same preprocessing and five fold checkpoints produce the Kaggle submission.">
+        <defs>
+          <marker id="ah-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="m-ink" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="ah-sig" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="m-sig" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="ah-gold" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="m-gold" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+
+        <text class="lane" x="24" y="30">TRAINING LABELS · READ FROM REPORTS (TRAIN ONLY)</text>
+        <text class="lane" x="24" y="176">IMAGES · SAME CODE FOR TRAIN AND TEST</text>
+        <text class="lane" x="24" y="352">VALIDATION AND SUBMISSION</text>
+
+        <!-- lane A edges -->
+        <line class="e sig" x1="218" y1="76" x2="282" y2="76" marker-end="url(#ah-sig)"/>
+        <text class="lbl sig" x="251" y="68" text-anchor="middle">prompt v2</text>
+        <text class="lbl" x="251" y="94" text-anchor="middle">strict JSON</text>
+        <line class="e sig" x1="484" y1="76" x2="548" y2="76" marker-end="url(#ah-sig)"/>
+        <text class="lbl sig" x="517" y="68" text-anchor="middle">5 states</text>
+        <text class="lbl" x="517" y="94" text-anchor="middle">+ evidence</text>
+        <line class="e sig" x1="750" y1="76" x2="814" y2="76" marker-end="url(#ah-sig)"/>
+        <text class="lbl sig" x="783" y="68" text-anchor="middle">0.05–0.90</text>
+        <text class="lbl" x="783" y="94" text-anchor="middle">per state</text>
+        <line class="e sig" x1="917" y1="112" x2="917" y2="184" marker-end="url(#ah-sig)"/>
+        <text class="lbl sig" x="927" y="152">BCE targets</text>
+
+        <!-- lane B edges -->
+        <line class="e ink" x1="218" y1="222" x2="282" y2="222" marker-end="url(#ah-ink)"/>
+        <text class="lbl" x="251" y="214" text-anchor="middle">sort, sample</text>
+        <text class="lbl" x="251" y="240" text-anchor="middle">crop, scale</text>
+        <line class="e ink" x1="484" y1="222" x2="814" y2="222" marker-end="url(#ah-ink)"/>
+        <text class="lbl" x="716" y="214" text-anchor="middle">4 views × 24 slices × 256²</text>
+        <text class="lbl" x="716" y="240" text-anchor="middle">uint8 .npz · ≈15 GB → GPU cluster</text>
+
+        <!-- gold: tunes the mapping (dev half), crosses the image arrow with a halo -->
+        <line class="halo" x1="610" y1="214" x2="610" y2="230"/>
+        <line class="e gold" x1="610" y1="364" x2="610" y2="114" marker-end="url(#ah-gold)"/>
+        <text class="lbl gold" x="618" y="300">tunes the mapping</text>
+        <text class="lbl gold" x="618" y="314">(dev 29 only)</text>
+        <!-- gold: scores the model, never trained on -->
+        <polyline class="e gold" points="700,364 700,330 880,330 880,260" marker-end="url(#ah-gold)"/>
+        <text class="lbl gold" x="790" y="322" text-anchor="middle">scored, never trained on</text>
+
+        <!-- validation edges -->
+        <line class="e ink" x1="218" y1="398" x2="282" y2="398" marker-end="url(#ah-ink)"/>
+        <text class="lbl" x="251" y="390" text-anchor="middle">hospitals</text>
+        <text class="lbl" x="251" y="416" text-anchor="middle">kept whole</text>
+        <polyline class="e ink" points="385,432 385,456 1026,456 1026,222 1016,222" marker-end="url(#ah-ink)"/>
+        <text class="lbl" x="700" y="474" text-anchor="middle">train on 4 folds, validate on the 5th</text>
+        <line class="e ink" x1="960" y1="256" x2="960" y2="360" marker-end="url(#ah-ink)"/>
+        <text class="lbl" x="952" y="352" text-anchor="end">5 checkpoints</text>
+
+        <!-- lane A nodes -->
+        <a href="#c-eda"><g class="box"><rect x="24" y="42" width="190" height="68" rx="5"/><circle class="dot done" cx="200" cy="56" r="5"/><text class="t" x="38" y="66">Radiology reports</text><text class="s" x="38" y="84">4,407 studies</text><text class="s" x="38" y="99">9 languages</text></g></a>
+        <a href="#c-labeller"><g class="box"><rect x="290" y="42" width="190" height="68" rx="5"/><circle class="dot running" cx="466" cy="56" r="5"/><text class="t" x="304" y="66">LLM labeller</text><text class="s" x="304" y="84">gpt-6.1-sol · Batch</text><text class="s" x="304" y="99">status per finding</text></g></a>
+        <a href="#c-labeller"><g class="box"><rect x="556" y="42" width="190" height="68" rx="5"/><circle class="dot done" cx="732" cy="56" r="5"/><text class="t" x="570" y="66">Status → probability</text><text class="s" x="570" y="84">mapping v2</text><text class="s" x="570" y="99">dev macro AUC 0.880</text></g></a>
+        <a href="#c-labeller"><g class="box"><rect x="822" y="42" width="190" height="68" rx="5"/><circle class="dot todo" cx="998" cy="56" r="5"/><text class="t" x="836" y="66">Soft labels</text><text class="s" x="836" y="84">4,349 studies × 12</text><text class="s" x="836" y="99">targets in [0, 1]</text></g></a>
+
+        <!-- lane B nodes -->
+        <a href="#c-preprocess"><g class="box"><rect x="24" y="188" width="190" height="68" rx="5"/><circle class="dot done" cx="200" cy="202" r="5"/><text class="t" x="38" y="212">DICOM series</text><text class="s" x="38" y="230">570 GB on Kaggle</text><text class="s" x="38" y="245">24,371 series</text></g></a>
+        <a href="#c-preprocess"><g class="box"><rect x="290" y="188" width="190" height="68" rx="5"/><circle class="dot running" cx="466" cy="202" r="5"/><text class="t" x="304" y="212">Preprocessing</text><text class="s" x="304" y="230">3 Kaggle CPU shards</text><text class="s" x="304" y="245">4 views per study</text></g></a>
+        <a href="#c-model"><g class="box"><rect x="822" y="188" width="190" height="68" rx="5"/><circle class="dot ready" cx="998" cy="202" r="5"/><text class="t" x="836" y="212">KneeNet training</text><text class="s" x="836" y="230">EfficientNet-B0, 2.5D</text><text class="s" x="836" y="245">A100 · 5 folds</text></g></a>
+
+        <!-- lane C nodes -->
+        <a href="#c-validation"><g class="box"><rect x="24" y="364" width="190" height="68" rx="5"/><circle class="dot done" cx="200" cy="378" r="5"/><text class="t" x="38" y="388">Site proxy</text><text class="s" x="38" y="406">29 hospital groups</text><text class="s" x="38" y="421">language + template</text></g></a>
+        <a href="#c-validation"><g class="box"><rect x="290" y="364" width="190" height="68" rx="5"/><circle class="dot ready" cx="466" cy="378" r="5"/><text class="t" x="304" y="388">5 CV folds</text><text class="s" x="304" y="406">grouped + stratified</text><text class="s" x="304" y="421">≈870 studies each</text></g></a>
+        <a href="#c-validation"><g class="box"><rect x="556" y="364" width="190" height="68" rx="5"/><circle class="dot done" cx="732" cy="378" r="5"/><text class="t" x="570" y="388">Gold 58</text><text class="s" x="570" y="406">image-based labels</text><text class="s" x="570" y="421">dev 29 · test 29</text></g></a>
+        <a href="#c-submit"><g class="box"><rect x="822" y="364" width="190" height="68" rx="5"/><circle class="dot todo" cx="998" cy="378" r="5"/><text class="t" x="836" y="388">Kaggle submission</text><text class="s" x="836" y="406">images only, offline</text><text class="s" x="836" y="421">5-fold mean → CSV</text></g></a>
+      </svg>
+    </div>
+    <figcaption>Teal is the training signal: report text becomes a label, and the label becomes the loss. Dashed amber is the gold yardstick: its dev half tunes the label mapping, and the whole 58 score the model without ever being trained on. Grey edges move images and folds. Click any box to jump to its section.</figcaption>
+    <div class="legend">
+      <span><span class="pill done">done</span></span><span><span class="pill running">running now</span></span><span><span class="pill ready">built, not run</span></span><span><span class="pill todo">to do</span></span>
+    </div>
+  </figure>
+</section>
+
+<section aria-labelledby="components">
+  <div class="section-head">
+    <div class="eyebrow">In pipeline order</div>
+    <h2 id="components">Components</h2>
+  </div>
+
+  <article class="dossier" id="c-eda">
+    <div class="left">
+      <div class="title-row"><h3>1 · What the data looks like</h3><span class="pill done">done</span></div>
+      <p>A study is one knee exam. It holds about 5 series (scans from different directions and settings), and each series is a stack of about 30 slices. The test set has images only. The reports exist only for training.</p>
+      <ul class="plain">
+        <li>Only 58 studies carry real labels, and they were picked to contain findings: every one has at least one positive, and 31% have a fracture.</li>
+        <li>Gold labels sometimes contradict the reports: a report says "moderate effusion" and the gold label says 0. The host confirmed the labels were read from the images with strict thresholds.</li>
+        <li>In training, the two sequence flags are always equal. "0/0" means no fat suppression (T1, PD or T2), not T1.</li>
+        <li>Reports come in 9 languages. The gold set has no French report.</li>
+      </ul>
+    </div>
+    <div class="right">
+      <dl class="facts">
+        <dt>Training studies</dt><dd>4,407 (58 labelled, 1.3%)</dd>
+        <dt>Series</dt><dd>24,371 · 3–14 per study, median 5</dd>
+        <dt>Fat-sat fluid view present</dt><dd>axial 100% · coronal 96.4% · sagittal 94.2%</dd>
+        <dt>Report languages</dt><dd>en 39% · es 15% · tr 12% · hr 9% · el 7% · de 6% · bg 5% · nl 3% · fr 2%</dd>
+        <dt>Rarest gold label</dt><dd>MCL, 9 of 58</dd>
+      </dl>
+      <div class="files"><span>notebooks/01_eda.ipynb</span></div>
+      <div class="chips"><a class="chip" href="#d1">D1</a><a class="chip" href="#d3">D3</a><a class="chip" href="#d7">D7</a></div>
+    </div>
+  </article>
+
+  <article class="dossier" id="c-validation">
+    <div class="left">
+      <div class="title-row"><h3>2 · Validation design</h3><span class="pill ready">folds freeze when labels land</span></div>
+      <p>There are two yardsticks. Cross-validation folds over the 4,349 pseudo-labelled studies are large and stable, which makes them good for comparing models. The 58 gold studies are small but true, which makes them good for an honest final check.</p>
+      <p>Folds keep each hospital whole. The data has no hospital column, so the code infers one from the report language (where only one hospital uses that language) or from the report's fixed opening template.</p>
+    </div>
+    <div class="right">
+      <dl class="facts">
+        <dt>Gold split</dt><dd>dev 29 (tuning) · test 29 (scored once)</dd>
+        <dt>Positives per gold half</dt><dd>4–18 per label</dd>
+        <dt>Hospital groups found</dt><dd>29 · largest 368 studies</dd>
+        <dt>Unknown hospital</dt><dd>754 studies (each its own group)</dd>
+        <dt>Fold size</dt><dd>≈ 870 studies × 5</dd>
+      </dl>
+      <div class="files"><span>validation/sites.py</span><span>validation/gold_split.py</span><span>validation/folds.py</span></div>
+      <div class="chips"><a class="chip" href="#d5">D5</a><a class="chip" href="#d6">D6</a></div>
+    </div>
+  </article>
+
+  <article class="dossier" id="c-labeller">
+    <div class="left">
+      <div class="title-row"><h3>3 · Report labeller</h3><span class="pill running">running</span></div>
+      <p>The LLM gets the official label definitions and returns, for each of the 12 findings, one of five states plus a short evidence quote. A fixed mapping then turns each state into a probability, which becomes the training target.</p>
+      <p>Version 1 used a single "negative" state and scored 0.788 on gold dev. Splitting it into "below threshold" (for example "small effusion") and "absent" raised that to 0.880, because AUC rewards ranking and the mild mentions carry ranking information.</p>
+    </div>
+    <div class="right">
+      <dl class="facts">
+        <dt>Model</dt><dd>gpt-6.1-sol · reasoning low · Batch API</dd>
+        <dt>States</dt><dd>positive · uncertain · below_threshold · absent · not_addressed</dd>
+        <dt>Mapping v2</dt><dd>0.90 · 0.70 · 0.30 · 0.05 · 0.05</dd>
+        <dt>Gold dev macro AUC</dt><dd>v1 0.788 → v2 0.880</dd>
+        <dt>Weakest label (dev)</dt><dd>Synovitis 0.745 (18 of 29 reports never mention it)</dd>
+        <dt>Cost</dt><dd>≈ $9 projected · hard stop $15</dd>
+      </dl>
+      <div class="files"><span>labeller/prompt.py</span><span>labeller/schema.py</span><span>labeller/llm.py</span><span>labeller/mapping.py</span></div>
+      <div class="chips"><a class="chip" href="#d2">D2</a><a class="chip" href="#d3">D3</a><a class="chip" href="#d4">D4</a><a class="chip" href="#d12">D12</a><a class="chip" href="#d13">D13</a><a class="chip" href="#d19">D19</a></div>
+    </div>
+  </article>
+
+  <article class="dossier" id="c-preprocess">
+    <div class="left">
+      <div class="title-row"><h3>4 · DICOM preprocessing</h3><span class="pill running">running on Kaggle</span></div>
+      <p>Each study becomes one fixed-size array: 4 view slots × 24 slices × 256 × 256 pixels, plus a flag per slot saying whether that view exists. The same code runs on Kaggle for training and inside the submission notebook for the test set, so the model never sees images prepared differently.</p>
+      <ul class="plain">
+        <li>Slices are ordered by physical position from the DICOM header, because the file names are random.</li>
+        <li>Each series is cropped to the body: a 3D axial scan is 640 × 1280 pixels with the knee small in the middle.</li>
+        <li>Intensities are rescaled per series, because MRI values have no fixed units across scanners.</li>
+      </ul>
+    </div>
+    <div class="right">
+      <dl class="facts">
+        <dt>Slots</dt><dd>sag_FS · cor_FS · axi_FS · sag_noFS</dd>
+        <dt>Per series</dt><dd>24 slices, even spacing</dd>
+        <dt>Duplicates</dt><dd>keep the series with most slices</dd>
+        <dt>Size</dt><dd>≈ 2.9 MB per study · ≈ 15 GB total</dd>
+        <dt>Speed (local)</dt><dd>≈ 1 s per study</dd>
+      </dl>
+      <div class="files"><span>preprocess/volume.py</span><span>preprocess/study.py</span><span>kaggle/push_preprocess.sh</span></div>
+      <div class="chips"><a class="chip" href="#d7">D7</a><a class="chip" href="#d9">D9</a><a class="chip" href="#d14">D14</a><a class="chip" href="#d15">D15</a><a class="chip" href="#d18">D18</a></div>
+    </div>
+  </article>
+
+  <article class="dossier" id="c-model">
+    <div class="left">
+      <div class="title-row"><h3>5 · KneeNet and training</h3><span class="pill ready">built, not trained</span></div>
+      <p>One ImageNet-pretrained 2D network looks at every slice of every view. Each slice is fed with its two neighbours as the three colour channels, which gives a little 3D context. Per view, learned attention picks out the slices that matter. One transformer layer lets the views exchange information. Views that are missing are masked out, and the result feeds 12 outputs.</p>
+      <p>Training uses binary cross-entropy against the soft labels. Augmentation includes left–right flips (safe, because medial stays medial on a mirrored knee) and randomly hiding whole views, so the model copes with studies that lack a view.</p>
+    </div>
+    <div class="right">
+      <dl class="facts">
+        <dt>Encoder</dt><dd>EfficientNet-B0 · 96 slices per study</dd>
+        <dt>Optimiser</dt><dd>AdamW 3e-4 · wd 0.01 · warm-up + cosine</dd>
+        <dt>Run</dt><dd>12 epochs · batch 8 · bf16 · 1 A100 per fold</dd>
+        <dt>Augmentation</dt><dd>flip · zoom 0.85–1 · intensity · view dropout 0.15</dd>
+        <dt>Checkpoint</dt><dd>best fold AUC vs pseudo-labels</dd>
+        <dt>Tests</dt><dd>missing view has no effect on output (passes)</dd>
+      </dl>
+      <div class="files"><span>model/network.py</span><span>model/data.py</span><span>model/train.py</span></div>
+      <div class="chips"><a class="chip" href="#d8">D8</a><a class="chip" href="#d10">D10</a><a class="chip" href="#d16">D16</a><a class="chip" href="#d17">D17</a></div>
+    </div>
+  </article>
+
+  <article class="dossier" id="c-submit">
+    <div class="left">
+      <div class="title-row"><h3>6 · Kaggle submission</h3><span class="pill todo">to do</span></div>
+      <p>A Kaggle notebook with internet switched off. It preprocesses about 1,300 test studies with the same code, averages the 5 fold models, and writes <span class="mono">submission.csv</span>. The run must finish within 9 hours.</p>
+    </div>
+    <div class="right">
+      <dl class="facts">
+        <dt>Inputs</dt><dd>test images + series flags (no reports)</dd>
+        <dt>Limit</dt><dd>≤ 9 h · no internet · 5 submissions a day</dd>
+      </dl>
+      <div class="chips"><a class="chip" href="#d9">D9</a><a class="chip" href="#d11">D11</a></div>
+    </div>
+  </article>
+</section>
+
+<section aria-labelledby="decisions">
+  <div class="section-head">
+    <div class="eyebrow">What to defend in an interview</div>
+    <h2 id="decisions">Decisions</h2>
+    <p class="muted">Each entry gives the choice, why, the evidence, and what would change it. Open one to read it.</p>
+  </div>
+  <div class="decisions">
+    <details class="dec" id="d1"><summary><span class="id">D1</span><span class="what">The 58 gold studies are for evaluation only<span class="why">58 extra training studies add 1.3%; an honest yardstick is worth more.</span></span></summary><div class="body"><p><b>Evidence:</b> they are enriched (every one has ≥1 positive, Fracture 31%), so their rates say nothing about the test set.</p><p><b>Would change if:</b> a larger gold set appeared.</p></div></details>
+    <details class="dec" id="d2"><summary><span class="id">D2</span><span class="what">Training targets come from reports, read by an LLM<span class="why">It is the only label source for 4,349 studies, and it handles negation, severity and 9 languages.</span></span></summary><div class="body"><p><b>Evidence:</b> the host explicitly allows LLM APIs. Forum benchmark against the 58: keyword rules 0.814, LLM 0.878.</p><p><b>Would change if:</b> LLM labels scored no better than rules on gold dev.</p></div></details>
+    <details class="dec" id="d3"><summary><span class="id">D3</span><span class="what">The labeller copies the annotators' definitions, and "not addressed" is its own answer<span class="why">Gold labels are image-based with strict thresholds; silence means different things per finding.</span></span></summary><div class="body"><p><b>Evidence:</b> host confirmed image-based, authoritative labels. In our gold dev data, silence was 0% positive for Baker's cyst but 22% for synovitis.</p></div></details>
+    <details class="dec" id="d4"><summary><span class="id">D4</span><span class="what">Soft labels with binary cross-entropy<span class="why">BCE is minimised at p = y, so a target of 0.3 teaches "30% likely".</span></span></summary><div class="body"><p>Hard 0/1 labels would inject confident errors wherever a report is unclear.</p></div></details>
+    <details class="dec" id="d5"><summary><span class="id">D5</span><span class="what">Gold split: dev 29 for tuning, test 29 scored once<span class="why">Tuning on the studies you score on makes the score optimistic.</span></span></summary><div class="body"><p>Multilabel-stratified halves, seed 0, 4–18 positives per label per half. With 29 studies, AUC gaps under about 0.02–0.03 are noise.</p></div></details>
+    <details class="dec" id="d6"><summary><span class="id">D6</span><span class="what">5 folds, grouped by hospital, balanced over all 12 labels<span class="why">Validation must look like the test, and the test likely has unseen hospitals.</span></span></summary><div class="body"><p><b>Evidence:</b> hospitals in Italy and Mongolia are credited, yet no training report is in Italian or Mongolian.</p><p><b>How:</b> greedy assignment, largest hospital first, each to the fold where it adds the least imbalance. No library does grouped and multilabel together.</p></div></details>
+    <details class="dec" id="d7"><summary><span class="id">D7</span><span class="what">Inputs are view slots chosen by plane and fat suppression<span class="why">Each finding shows best in particular views, and the flags are given at test time.</span></span></summary><div class="body"><p>MCL reads on coronal, ACL on sagittal, bone bruises on fat-suppressed views.</p></div></details>
+    <details class="dec" id="d8"><summary><span class="id">D8</span><span class="what">2.5D, not 3D<span class="why">Voxels are 0.16 mm in-plane but about 3.3 mm between slices; 2D encoders come pretrained.</span></span></summary><div class="body"><p>A 3D network would be heavier, pretrained on less data, and would spend its capacity on the coarse axis.</p></div></details>
+    <details class="dec" id="d9"><summary><span class="id">D9</span><span class="what">Preprocess on Kaggle with the exact inference code<span class="why">The 570 GB stays put, and train and test images are prepared identically.</span></span></summary><div class="body"><p>Only 15 GB of arrays moves to the GPU cluster.</p></div></details>
+    <details class="dec" id="d10"><summary><span class="id">D10</span><span class="what">A modest encoder; effort goes into labels<span class="why">Forum: a bigger encoder gained +0.0011; labels are the binding constraint.</span></span></summary><div class="body"><p>Encoder size is one of the planned M4 experiments, after labels and views.</p></div></details>
+    <details class="dec" id="d11"><summary><span class="id">D11</span><span class="what">Walking skeleton first<span class="why">An early end-to-end submission finds packaging and runtime problems while there is time.</span></span></summary><div class="body"><p>The first leaderboard score is targeted for the day training starts.</p></div></details>
+    <details class="dec" id="d12"><summary><span class="id">D12</span><span class="what">OpenAI gpt-6.1-sol, low reasoning, Batch API<span class="why">Strong mid-tier model, half price in batch, key already available.</span></span></summary><div class="body"><p>Gold dev cost $0.13 at standard price, about 350 output tokens per report. One request format serves both sync and batch, the output is strict JSON, and every answer is cached on disk.</p></div></details>
+    <details class="dec" id="d13"><summary><span class="id">D13</span><span class="what">Keep a "below threshold" severity tier<span class="why">AUC rewards ranking; "small effusion" ranks above "no effusion" even though both are 0.</span></span></summary><div class="body"><p><b>Evidence (gold dev):</b> v1 0.788 → v2 0.880. In v1, "negative" effusions were 36% gold-positive, and silence ranked wrongly above "negative" for 4 labels.</p></div></details>
+    <details class="dec" id="d14"><summary><span class="id">D14</span><span class="what">Four slots; missing views are masked<span class="why">Fat-sat views exist in 94–100% of studies; sagittal non-fat-sat in 97%.</span></span></summary><div class="body"><p>Slot type uses the fluid-sensitive flag, so unseen flag combinations still map somewhere. Duplicates keep the series with the most slices. A test proves a missing view's pixels never change the output.</p></div></details>
+    <details class="dec" id="d15"><summary><span class="id">D15</span><span class="what">24 slices, crop to body, 256 px, per-series scaling<span class="why">Fixed shape for batching; no wasted field of view; scanner-independent intensities.</span></span></summary><div class="body"><p>Percentile scaling uses the 1st–99.5th percentiles mapped to 0–255.</p></div></details>
+    <details class="dec" id="d16"><summary><span class="id">D16</span><span class="what">Shared encoder, attention over slices, fusion over views<span class="why">A finding sits in a few slices of one or two views.</span></span></summary><div class="body"><p>2.5D neighbour channels, slot-type embedding, one transformer layer across views, masked mean, 12-output head.</p></div></details>
+    <details class="dec" id="d17"><summary><span class="id">D17</span><span class="what">Training recipe<span class="why">Standard and stable choices; the experiments go elsewhere.</span></span></summary><div class="body"><p>AdamW 3e-4, warm-up then cosine, bf16, gradient clip 1, 12 epochs. Flips are label-safe because the labels are anatomical. View dropout matches test studies with missing views.</p></div></details>
+    <details class="dec" id="d18"><summary><span class="id">D18</span><span class="what">Kaggle preprocesses, a GPU cluster trains, Kaggle submits<span class="why">Move 15 GB instead of 570 GB, and train on A100s.</span></span></summary><div class="body"><p>Three Kaggle CPU notebooks run in parallel, one shard each.</p></div></details>
+    <details class="dec" id="d19"><summary><span class="id">D19</span><span class="what">Labelling spend is capped and never paid twice<span class="why">$19 of credit, hard stop at $15.</span></span></summary><div class="body"><p>OpenAI's Tier-1 queue holds 900k tokens for this model, so the reports go through in sequential chunks of 350. A restart first collects batches already in flight.</p></div></details>
+  </div>
+</section>
+
+<section aria-labelledby="scores">
+  <div class="section-head">
+    <div class="eyebrow">One change per row</div>
+    <h2 id="scores">Scores</h2>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>ID</th><th>Change</th><th>Gold dev 29</th><th>Gold test 29</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">L1</td><td>Labeller v1: 4 states, one mapping</td><td class="n">0.788</td><td class="n">–</td><td>silence ranked above "negative"</td></tr>
+        <tr><td class="mono">L2</td><td>Labeller v2: + below threshold, absent vs not addressed</td><td class="n best">0.880</td><td class="n">–</td><td>Synovitis weakest at 0.745</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>ID</th><th>Model change</th><th>CV (pseudo)</th><th>Gold 58</th><th>Leaderboard</th></tr></thead>
+      <tbody><tr><td class="mono">M0</td><td>Baseline KneeNet, EfficientNet-B0, labels v2</td><td class="n">–</td><td class="n">–</td><td class="n">–</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<section aria-labelledby="tomorrow">
+  <div class="section-head">
+    <div class="eyebrow">Oct 5</div>
+    <h2 id="tomorrow">Tomorrow's runbook</h2>
+    <p class="muted">The order the training data and runs go through.</p>
+  </div>
+  <ol class="steps">
+    <li><span class="who me">me</span><span class="txt">Copy code and the small CSVs (labels, splits) to the GPU cluster.</span></li>
+    <li><span class="who me">me</span><span class="txt">Build the environment and cache the ImageNet weights.</span></li>
+    <li><span class="who me">me</span><span class="txt">Move the 3 preprocessed shards from Kaggle, verified byte-for-byte.</span></li>
+    <li><span class="who me">me</span><span class="txt">Smoke run: fold 0 for 2 epochs.</span></li>
+    <li><span class="who me">me</span><span class="txt">Full run: two folds at a time until all five are done.</span></li>
+  </ol>
+</section>
+
+<section aria-labelledby="interview">
+  <div class="section-head">
+    <div class="eyebrow">Interview</div>
+    <h2 id="interview">How to explain it</h2>
+  </div>
+  <blockquote>"Only 58 studies had real labels, so I turned 4,349 radiology reports into soft labels with an LLM, tuned to the annotators' image-based definitions and checked on a held-out half of the gold set. Then I trained a 2.5D multi-view CNN with hospital-grouped cross-validation, because the test set likely contains unseen hospitals."</blockquote>
+  <div class="qa">
+    <div><span class="q">Why not train on the 58 labelled studies?</span><span class="a">They add 1.3% data but are the only true yardstick, and they are enriched, so their label rates are misleading. (D1)</span></div>
+    <div><span class="q">How do you know the LLM labels are any good?</span><span class="a">Macro AUC 0.880 on 29 held-out gold studies, against a published keyword baseline of 0.814. The prompt was tuned on dev only; test is scored once. (D5, D13)</span></div>
+    <div><span class="q">What was the biggest single improvement so far?</span><span class="a">Not a bigger model: splitting "negative" into "below threshold" and "absent". AUC is about ranking, and mild mentions carry it. +0.09 on gold dev. (D13)</span></div>
+    <div><span class="q">Why group folds by hospital?</span><span class="a">Same-hospital studies in train and validation leak scanner style and case mix. Sites credited in Italy and Mongolia have no training reports, so the test likely has unseen hospitals. (D6)</span></div>
+    <div><span class="q">Why 2.5D instead of a 3D CNN?</span><span class="a">Slices are 20× coarser than pixels, so the volume is sharp in 2D only. 2D encoders come ImageNet-pretrained; neighbour channels add the little through-plane context. (D8)</span></div>
+    <div><span class="q">What happens when a view is missing?</span><span class="a">The slot is masked and provably ignored, and training randomly hides views so the model never depends on one. (D14, D17)</span></div>
+  </div>
+</section>
+
+<footer>Source: <span class="mono">docs/project_map.html</span> in the repo. Every number on this page comes from a committed script or the decision log, and contains no report text.</footer>
+</div>
+
+<script>
+(function () {
+  var deadline = Date.UTC(2026, 9, 22, 23, 59);
+  var days = Math.max(0, Math.ceil((deadline - Date.now()) / 86400000));
+  var el = document.getElementById("days-left");
+  if (el) el.innerHTML = "Days left <strong>" + days + "</strong>";
+})();
+</script>
