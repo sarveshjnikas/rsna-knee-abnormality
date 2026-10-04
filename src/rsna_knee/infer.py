@@ -63,6 +63,9 @@ def main() -> None:
                             workers=args.workers)
     for error in errors:
         print(error, flush=True)
+    n_series_studies = pd.read_csv(args.comp_dir / "test_series.csv")["StudyInstanceUID"].nunique()
+    if len(errors) > 0.05 * max(n_series_studies, 1):  # a broken decoder must fail the run, not hide in averages
+        raise RuntimeError(f"{len(errors)} of {n_series_studies} test studies failed preprocessing")
 
     checkpoints = fold_checkpoints(args.models)
     print(f"{len(checkpoints)} fold models: {[str(c) for c, _ in checkpoints]}", flush=True)
