@@ -14,6 +14,10 @@ dependencies = [
     "pylibjpeg-openjpeg>=2.6.0",
     "pylibjpeg-libjpeg>=2.4.0",
     "iterative-stratification>=0.1.9",
+    "openai>=3.24.0",
+    "pydantic>=2.13.5",
+    "python-dotenv>=1.2.4",
+    "scikit-learn>=1.9.1",
 ]
 
 [dependency-groups]

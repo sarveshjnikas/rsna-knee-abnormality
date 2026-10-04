@@ -8,6 +8,7 @@ DATA = ROOT / "data"
 RAW = DATA / "raw"  # competition files, exactly as downloaded
 INTERIM = DATA / "interim"  # derived tables (site proxy, ...), rebuilt by code
 SPLITS = DATA / "splits"  # gold split and CV folds, rebuilt from code + seed
+LABEL_DIR = DATA / "labels"  # LLM outputs (cached raw responses) and derived soft labels
 
 # Column order matches train.csv and sample_submission.csv.
 LABELS = [
