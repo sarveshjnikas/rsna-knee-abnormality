@@ -14,3 +14,15 @@ One change per row. CV = mean OOF macro AUC vs pseudo-labels (site-grouped 5-fol
 
 | ID | Date | Change | CV | Gold | LB | Notes |
 |---|---|---|---|---|---|---|
+
+## Queue (M4, one change at a time, ordered by expected gain per GPU-hour)
+
+| ID | Change | Why it might help | Cost |
+|---|---|---|---|
+| E1 | Baseline: EfficientNet-B0, 4 slots, 24 × 256², labels v3 | reference point for everything below | 5 folds × ~2 h |
+| E2 | + cor_noFS slot (5 slots) | anatomy view for MCL / OA / fractures; present in 77% | same |
+| E3 | 320 px instead of 256 | menisci are thin; forum notes resolution matters for meniscus | ~1.6× time, re-preprocess |
+| E4 | Flip TTA at inference | free, usually +0.002–0.005 | inference only |
+| E5 | Larger encoder (EfficientNet-B2 / ConvNeXt-Nano) | forum says small gains; test last | ~2× time |
+| E6 | Seed / backbone ensemble | variance reduction | linear in models |
+| E7 | Per-label mapping fitted on gold dev | uses the dev half harder; risk of overfitting 29 studies | free |
