@@ -37,7 +37,7 @@ def predict(model: KneeNet, loader: DataLoader, device: str) -> tuple[np.ndarray
     scores, uids = [], []
     for image, present, _, batch_uids in loader:
         image = image.to(device, non_blocking=True).float() / 255
-        with torch.autocast(device_type=device.split(":")[0], dtype=torch.bfloat16, enabled=device != "cpu"):
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=device == "cuda"):
             logits = model(image, present.to(device))
         scores.append(logits.float().sigmoid().cpu().numpy())
         uids += list(batch_uids)
@@ -63,7 +63,7 @@ def main() -> None:
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
     out = args.out / f"fold{args.fold}"
     out.mkdir(parents=True, exist_ok=True)
     (out / "config.json").write_text(json.dumps({k: str(v) for k, v in vars(args).items()}, indent=2))
@@ -103,7 +103,7 @@ def main() -> None:
         for image, present, target, _ in train_loader:
             image = image.to(device, non_blocking=True).float() / 255
             image, present = augment(image, present.to(device))
-            with torch.autocast(device_type=device, dtype=torch.bfloat16, enabled=device != "cpu"):
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=device == "cuda"):
                 loss = loss_fn(model(image, present).float(), target.to(device))
             optimizer.zero_grad(set_to_none=True)
             loss.backward()

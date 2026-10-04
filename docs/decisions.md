@@ -79,7 +79,7 @@ Each entry: the choice, why, the evidence, and what would change it.
 
 ## D17. Training recipe
 - BCE on soft targets; AdamW (lr 3e-4, weight decay 0.01); 1-epoch warm-up then cosine; bf16; gradient clip 1.0; 12 epochs; batch 8 studies.
-- **Augmentation:** horizontal flip (labels are anatomical, a mirrored left knee is a right knee), zoom crop 0.85–1, per-view intensity gain/offset, view dropout 0.15 (test studies can lack views).
+- **Augmentation:** horizontal flip (labels are anatomical, a mirrored left knee is a right knee; QA of 1,469 preprocessed studies shows sagittal images facing left at some hospitals and right at others), zoom crop 0.85–1, per-view intensity gain/offset, view dropout 0.15 (test studies can lack views).
 - **Checkpoint** chosen on the fold's validation AUC against pseudo-labels; the 58 gold studies are never trained on and are reported as an honest check.
 
 ## D18. Compute split: Kaggle CPU preprocesses, the GPU cluster trains, Kaggle GPU submits
