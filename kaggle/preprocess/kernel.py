@@ -7,7 +7,9 @@ import sys
 SHARD, NUM_SHARDS = {shard}, {num_shards}
 
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "pylibjpeg", "pylibjpeg-openjpeg", "pylibjpeg-libjpeg"], check=True)
-sys.path.insert(0, glob.glob("/kaggle/input/**/rsna-knee-code/src", recursive=True)[0])
+package = glob.glob("/kaggle/input/**/rsna_knee/__init__.py", recursive=True)[0]
+sys.path.insert(0, os.path.dirname(os.path.dirname(package)))
+print("python", sys.version, "| cpus", os.cpu_count(), flush=True)
 comp = os.path.dirname(glob.glob("/kaggle/input/**/train_series.csv", recursive=True)[0])
 
 from rsna_knee.preprocess import run  # noqa: E402
