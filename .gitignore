@@ -22,3 +22,6 @@ runs/
 
 # Secrets (API keys etc.)
 .env
+
+# Kaggle upload staging
+kaggle/.build/
