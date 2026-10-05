@@ -12,6 +12,8 @@ Val = gold-58 macro AUC of the run's ensemble (models never train on the 58). LB
 | A1+ | E1 + ResNet-50 fold 0 | 0.900 | 0.930 *exp* | 2,642 |
 | P2 | v2 data (150 mm crop, 32 central slices), B0 students, folds 0–1 | 0.913 (dev 0.926 / test **0.898**) | ~0.938 *exp* at 5 folds | – |
 | P2 vs v1 | same folds 0–1, v1 students | 0.904 (dev 0.917 / test 0.888) | – | – |
+| L4 | Public label sets vs ours (gold, labels only) | ours test 0.863; stevenleehans v4 0.879; pilkwang 0.862; lixin 0.827 | – | – |
+| L4b | Same, after mixing 50/50 with our B0 image teacher | ours 0.907 vs ours+steven v4 0.906 (test) | – | – |
 | A2 | ResNet-50 plain pooling students (labels r1), folds 0–1 | 0.898 (dev 0.914 / test 0.880) | – | – |
 | A2+ | D1 + A2 averaged 50/50 by family | 0.911 (dev 0.924 / test **0.896**) | ~0.935 *exp* (test +0.006) | – |
 | D1 | Self-training round 1 students (0.5 LLM + 0.5 out-of-fold), 5 folds, flip TTA at inference | 0.908 (dev 0.922 / test 0.890) | **0.929** | **2,686** |

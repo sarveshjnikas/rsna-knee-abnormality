@@ -110,3 +110,7 @@ Each entry: the choice, why, the evidence, and what would change it.
 - **Why:** with a body crop the scale varies by scanner field of view (one study's axial view used a 186 mm window, others 150 mm), so the same structure has a different size in pixels; a fixed physical window gives every study 0.59 mm/pixel. Central 6–94% of each stack drops skin-only edge slices.
 - **Evidence:** same folds (0–1), same labels: gold test half 0.888 (v1) → 0.898 (v2); dev 0.917 → 0.926. Two v2 models beat the five-model v1 student ensemble on the test half.
 - **Cost:** 33% more slices: 479 s per epoch instead of 360 s, 61 GB GPU memory instead of 46.
+
+## D24. Public label sets are not added
+- **Evidence:** alone, stevenleehans's v4 labels beat ours on the gold test half (0.879 vs 0.863). After the 50/50 mix with our out-of-fold image predictions, which is what students train on, there is no difference (0.906 vs 0.907).
+- **Meaning:** the image teacher already supplies what better report reading would add. Gains now come from better teachers (better data, more model families), not from more labellers. Also avoids depending on third-party label licences.
