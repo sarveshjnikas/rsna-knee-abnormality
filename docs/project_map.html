@@ -188,7 +188,7 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
     <span>Final submission <strong>22 Oct 2026, 23:59 UTC</strong></span>
     <span>Entry and team deadline <strong>15 Oct</strong></span>
     <span id="days-left">Days left <strong>18</strong></span>
-    <span>Map updated <strong>5 Oct, 15:05 IST</strong></span>
+    <span>Map updated <strong>5 Oct, 17:10 IST</strong></span>
   </div>
 </header>
 
@@ -210,6 +210,26 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
     <div class="live-row"><span>Kaggle preprocessing shards</span><div class="bar"><span style="width: 100%"></span></div><span class="num">3 / 3 done · 0 errors</span></div>
     <div class="live-row"><span>Data moved to the GPU cluster</span><div class="bar"><span style="width: 100%"></span></div><span class="num">3 / 3 shards · 4,407 studies</span></div>
     <div class="live-row"><span>Self-training students, folds 0–1</span><div class="bar"><span style="width: 50%"></span></div><span class="num">epoch 6 / 12 · student gold 0.899 vs teacher 0.875</span></div>
+  </div>
+</section>
+
+<section aria-labelledby="scoreboard">
+  <div class="section-head">
+    <div class="eyebrow">What worked</div>
+    <h2 id="scoreboard">Scoreboard</h2>
+    <p class="muted">Val = gold-58 macro AUC (radiologist labels, never trained on). LB = public leaderboard; <i>exp</i> = expected, val + 0.03, calibrated on the first two submissions. Medal lines today: bronze 0.943 · silver 0.945 · gold 0.958.</p>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>#</th><th>What changed</th><th>Val</th><th>LB</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">E1a</td><td>Baseline: B0 attention, labels v3, 2 folds</td><td class="n">0.885</td><td class="n">0.916</td></tr>
+        <tr><td class="mono">E1</td><td>Baseline, 5 folds</td><td class="n">0.896</td><td class="n">0.924</td></tr>
+        <tr><td class="mono">A1</td><td>ResNet-50 plain pooling, 1 fold</td><td class="n">0.878</td><td class="n muted">0.908 exp</td></tr>
+        <tr><td class="mono">A1+</td><td>E1 + ResNet-50 fold 0</td><td class="n">0.900</td><td class="n muted">0.930 exp</td></tr>
+        <tr><td class="mono">D1</td><td>Self-training round 1 students, 5 folds, flip TTA</td><td class="n best">0.908</td><td class="n muted">0.938 exp</td></tr>
+      </tbody>
+    </table>
   </div>
 </section>
 
