@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import APIConnectionError, APITimeoutError, OpenAI
 
 from rsna_knee.config import LABEL_DIR, ROOT
 from rsna_knee.labeller.prompt import PROMPT_VERSION, SYSTEM_PROMPT, user_message
@@ -37,7 +37,7 @@ _cache_lock = threading.Lock()
 
 def make_client() -> OpenAI:
     load_dotenv(ROOT / ".env")
-    return OpenAI()
+    return OpenAI(max_retries=8)  # long unattended runs: ride out network blips
 
 
 def request_body(report: str) -> dict:
@@ -193,6 +193,15 @@ def run_batches(studies: pd.DataFrame, chunk_size: int = 350, poll_seconds: int 
     Stops before any chunk that could take total spend past BUDGET_USD.
     """
     LABEL_DIR.mkdir(parents=True, exist_ok=True)
+    while True:
+        try:
+            return _run_batches(studies, chunk_size, poll_seconds)
+        except (APIConnectionError, APITimeoutError) as error:  # resume is safe: in-flight batches are collected first
+            print(f"network error ({error}); resuming in 2 minutes", flush=True)
+            time.sleep(120)
+
+
+def _run_batches(studies: pd.DataFrame, chunk_size: int, poll_seconds: int) -> None:
     client = make_client()
     _wait_for_logged_batches(client, poll_seconds)
     while True:
