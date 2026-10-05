@@ -31,8 +31,8 @@ def fold_checkpoints(models_dir: Path) -> list[tuple[Path, str, str]]:
 
 @torch.no_grad()
 def predict(processed: Path, uids: list[str], checkpoints: list[tuple[Path, str, str]], batch_size: int = 4,
-            workers: int = 2) -> pd.DataFrame:
-    """Mean sigmoid probability over fold models, one row per study."""
+            workers: int = 2, flip_tta: bool = True) -> pd.DataFrame:
+    """Mean sigmoid probability over fold models (and a left-right flip of every view), one row per study."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
     loader = DataLoader(StudyDataset(uids, processed), batch_size=batch_size, num_workers=workers)
     total = np.zeros((len(uids), len(LABELS)))
@@ -43,8 +43,12 @@ def predict(processed: Path, uids: list[str], checkpoints: list[tuple[Path, str,
         rows = []
         for image, present, _, _ in loader:
             image = image.to(device).float() / 255
+            present = present.to(device)
             with torch.autocast(device_type=device, dtype=torch.float16, enabled=device == "cuda"):
-                rows.append(model(image, present.to(device)).float().sigmoid().cpu().numpy())
+                prob = model(image, present).float().sigmoid()
+                if flip_tta:  # trained with left-right flips, so the mirrored study is an equally valid view
+                    prob = (prob + model(image.flip(-1), present).float().sigmoid()) / 2
+            rows.append(prob.cpu().numpy())
         total += np.concatenate(rows)
     return pd.DataFrame(total / len(checkpoints), columns=LABELS).assign(StudyInstanceUID=uids)
 
