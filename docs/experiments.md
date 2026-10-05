@@ -14,6 +14,7 @@ One change per row. CV = mean OOF macro AUC vs pseudo-labels (site-grouped 5-fol
 
 | ID | Date | Change | CV | Gold | LB | Notes |
 |---|---|---|---|---|---|---|
+| S0 | Oct 5 | Smoke: fold 0, 2 epochs, shard 0 only (~1,180 train studies) | 0.757 (fold 0) | 0.736 (58) | – | loss 0.534 → 0.486; 46 GB GPU peak at batch 8; ~2–3 min/epoch |
 
 ## Queue (M4, one change at a time, ordered by expected gain per GPU-hour)
 
