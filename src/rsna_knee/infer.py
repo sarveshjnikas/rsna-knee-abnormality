@@ -14,31 +14,39 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-from rsna_knee.config import LABELS, N_SLICES, SLOTS
+from rsna_knee.config import LABELS, PREPROCESS, SLOTS
 from rsna_knee.model.data import StudyDataset
 from rsna_knee.model.network import KneeNet
 from rsna_knee.preprocess.run import preprocess_all
 
 
-def fold_checkpoints(models_dir: Path) -> list[tuple[Path, str, str]]:
-    """(model.pt, backbone, fusion) for every fold directory under models_dir."""
+def fold_checkpoints(models_dir: Path) -> list[dict]:
+    """One entry per fold checkpoint under models_dir, with what is needed to rebuild and feed it."""
     found = []
     for checkpoint in sorted(models_dir.glob("**/fold*/model.pt")):
         config = json.loads((checkpoint.parent / "config.json").read_text())
-        found.append((checkpoint, config.get("backbone", "efficientnet_b0"), config.get("fusion", "attention")))
+        version = config.get("preprocess", "v1")
+        found.append({
+            "path": checkpoint,
+            "backbone": config.get("backbone", "efficientnet_b0"),
+            "fusion": config.get("fusion", "attention"),
+            "version": version,
+            "n_slices": int(config.get("n_slices", PREPROCESS[version]["n_slices"])),
+        })
     return found
 
 
 @torch.no_grad()
-def predict(processed: Path, uids: list[str], checkpoints: list[tuple[Path, str, str]], batch_size: int = 4,
+def predict(processed: Path, uids: list[str], checkpoints: list[dict], batch_size: int = 4,
             workers: int = 2, flip_tta: bool = True) -> pd.DataFrame:
     """Mean sigmoid probability over fold models (and a left-right flip of every view), one row per study."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
     loader = DataLoader(StudyDataset(uids, processed), batch_size=batch_size, num_workers=workers)
     total = np.zeros((len(uids), len(LABELS)))
-    for checkpoint, backbone, fusion in checkpoints:
-        model = KneeNet(n_slots=len(SLOTS), n_slices=N_SLICES, backbone=backbone, pretrained=False, fusion=fusion)
-        model.load_state_dict(torch.load(checkpoint, map_location="cpu"))
+    for ck in checkpoints:
+        model = KneeNet(n_slots=len(SLOTS), n_slices=ck["n_slices"], backbone=ck["backbone"], pretrained=False,
+                        fusion=ck["fusion"])
+        model.load_state_dict(torch.load(ck["path"], map_location="cpu"))
         model.to(device).eval()
         rows = []
         for image, present, _, _ in loader:
@@ -63,18 +71,25 @@ def main() -> None:
     args = p.parse_args()
 
     test = pd.read_csv(args.comp_dir / "test.csv")
-    errors = preprocess_all(args.comp_dir / "test_series.csv", args.comp_dir / "test_series", args.work,
-                            workers=args.workers)
-    for error in errors:
-        print(error, flush=True)
-    n_series_studies = pd.read_csv(args.comp_dir / "test_series.csv")["StudyInstanceUID"].nunique()
-    if len(errors) > 0.05 * max(n_series_studies, 1):  # a broken decoder must fail the run, not hide in averages
-        raise RuntimeError(f"{len(errors)} of {n_series_studies} test studies failed preprocessing")
-
     checkpoints = fold_checkpoints(args.models)
-    print(f"{len(checkpoints)} fold models: {[str(c[0]) for c in checkpoints]}", flush=True)
-    ready = [uid for uid in test["StudyInstanceUID"] if (args.work / f"{uid}.npz").exists()]
-    predictions = predict(args.work, ready, checkpoints)
+    print(f"{len(checkpoints)} fold models: {[str(c['path']) for c in checkpoints]}", flush=True)
+    n_series_studies = pd.read_csv(args.comp_dir / "test_series.csv")["StudyInstanceUID"].nunique()
+
+    weighted, total_models = [], 0
+    for version in sorted({c["version"] for c in checkpoints}):  # prepare the test set once per version
+        work = args.work / version
+        errors = preprocess_all(args.comp_dir / "test_series.csv", args.comp_dir / "test_series", work,
+                                workers=args.workers, version=version)
+        for error in errors:
+            print(error, flush=True)
+        if len(errors) > 0.05 * max(n_series_studies, 1):  # a broken decoder must fail the run, not hide in averages
+            raise RuntimeError(f"{len(errors)} of {n_series_studies} test studies failed preprocessing ({version})")
+        group = [c for c in checkpoints if c["version"] == version]
+        ready = [uid for uid in test["StudyInstanceUID"] if (work / f"{uid}.npz").exists()]
+        part = predict(work, ready, group).set_index("StudyInstanceUID")[LABELS]
+        weighted.append(part * len(group))
+        total_models += len(group)
+    predictions = (sum(weighted) / total_models).reset_index()  # every model counts equally
 
     # A study that failed preprocessing still needs a row: use the mean prediction (ranks it in the middle).
     submission = test[["StudyInstanceUID"]].merge(predictions, on="StudyInstanceUID", how="left")

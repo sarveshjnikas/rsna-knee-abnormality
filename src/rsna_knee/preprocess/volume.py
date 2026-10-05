@@ -24,9 +24,10 @@ def sorted_slice_paths(series_dir: Path) -> list[Path]:
     return [paths[i] for i in np.argsort(keys, kind="stable")]
 
 
-def pick_indices(n_total: int, n: int = N_SLICES) -> np.ndarray:
-    """n indices spread evenly over the stack (repeats when the stack is shorter than n)."""
-    return np.linspace(0, n_total - 1, n).round().astype(int)
+def pick_indices(n_total: int, n: int = N_SLICES, slice_range: tuple[float, float] = (0.0, 1.0)) -> np.ndarray:
+    """n indices spread evenly over the chosen part of the stack (repeats when it is shorter than n)."""
+    low, high = slice_range[0] * (n_total - 1), slice_range[1] * (n_total - 1)
+    return np.linspace(low, high, n).round().astype(int)
 
 
 def to_square(image: np.ndarray, size: int = IMAGE_SIZE) -> np.ndarray:
@@ -53,6 +54,25 @@ def crop_to_body(volume: np.ndarray, margin: float = 0.05) -> np.ndarray:
     return volume[:, r0:r1, c0:c1]
 
 
+def crop_physical(volume: np.ndarray, spacing: tuple[float, float], crop_mm: float) -> np.ndarray:
+    """A crop_mm x crop_mm window centred on the body, so every study has the same mm per pixel.
+
+    Areas of the window outside the image are zero-padded.
+    """
+    projection = volume.max(axis=0)
+    mask = projection > 0.1 * np.percentile(projection, 99)
+    rows, cols = (np.flatnonzero(mask.any(axis=1)), np.flatnonzero(mask.any(axis=0))) if mask.any() else (
+        np.array([0, volume.shape[1] - 1]), np.array([0, volume.shape[2] - 1]))
+    centre_r, centre_c = (rows[0] + rows[-1]) // 2, (cols[0] + cols[-1]) // 2
+    half_r, half_c = int(round(crop_mm / 2 / spacing[0])), int(round(crop_mm / 2 / spacing[1]))
+    out = np.zeros((volume.shape[0], 2 * half_r, 2 * half_c), dtype=volume.dtype)
+    r0, c0 = centre_r - half_r, centre_c - half_c
+    src_r0, src_c0 = max(r0, 0), max(c0, 0)
+    src_r1, src_c1 = min(r0 + 2 * half_r, volume.shape[1]), min(c0 + 2 * half_c, volume.shape[2])
+    out[:, src_r0 - r0 : src_r1 - r0, src_c0 - c0 : src_c1 - c0] = volume[:, src_r0:src_r1, src_c0:src_c1]
+    return out
+
+
 def normalise(volume: np.ndarray) -> np.ndarray:
     """Per-series percentile scaling to uint8: MRI intensities have no fixed units across scanners."""
     low, high = np.percentile(volume, INTENSITY_PERCENTILES)
@@ -65,14 +85,19 @@ def _frames(path: Path) -> np.ndarray:
     return pixels if pixels.ndim == 3 else pixels[None]  # multi-frame files hold several slices
 
 
-def load_volume(series_dir: Path, n_slices: int = N_SLICES, size: int = IMAGE_SIZE) -> np.ndarray:
+def load_volume(series_dir: Path, n_slices: int = N_SLICES, size: int = IMAGE_SIZE, crop_mm: float | None = None,
+                slice_range: tuple[float, float] = (0.0, 1.0)) -> np.ndarray:
     paths = sorted_slice_paths(series_dir)
     if len(paths) == 1:  # a single multi-frame file
         frames = _frames(paths[0])
-        slices = [frames[i] for i in pick_indices(len(frames), n_slices)]
+        slices = [frames[i] for i in pick_indices(len(frames), n_slices, slice_range)]
     else:
-        slices = [_frames(paths[i])[0] for i in pick_indices(len(paths), n_slices)]
+        slices = [_frames(paths[i])[0] for i in pick_indices(len(paths), n_slices, slice_range)]
     shape = slices[0].shape  # rare series mix slice sizes; bring them to the first one's
     slices = [s if s.shape == shape else cv2.resize(s, shape[::-1]) for s in slices]
-    volume = crop_to_body(np.stack(slices))
+    spacing = getattr(pydicom.dcmread(paths[0], stop_before_pixels=True), "PixelSpacing", None)
+    if crop_mm and spacing is not None:
+        volume = crop_physical(np.stack(slices), (float(spacing[0]), float(spacing[1])), crop_mm)
+    else:  # v1, or no pixel spacing in the header
+        volume = crop_to_body(np.stack(slices))
     return normalise(np.stack([to_square(s, size) for s in volume]))

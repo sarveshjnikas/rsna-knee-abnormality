@@ -18,13 +18,13 @@ import pandas as pd
 from rsna_knee.preprocess.study import build_study
 
 
-def _process(args: tuple[str, pd.DataFrame, Path, Path]) -> str | None:
-    uid, series, image_root, out = args
+def _process(args: tuple[str, pd.DataFrame, Path, Path, str]) -> str | None:
+    uid, series, image_root, out, version = args
     target = out / f"{uid}.npz"
     if target.exists():
         return None
     try:
-        image, present = build_study(series, image_root / uid)
+        image, present = build_study(series, image_root / uid, version)
         np.savez_compressed(target, image=image, present=present)
         return None
     except Exception:  # one bad study must not stop the run; it is reported at the end
@@ -32,7 +32,7 @@ def _process(args: tuple[str, pd.DataFrame, Path, Path]) -> str | None:
 
 
 def preprocess_all(series_csv: Path, image_root: Path, out: Path, shard: int = 0, num_shards: int = 1,
-                   workers: int = 4) -> list[str]:
+                   workers: int = 4, version: str = "v1") -> list[str]:
     """Write one .npz per study; returns error messages for studies that failed."""
     series = pd.read_csv(series_csv)
     studies = sorted(uid for uid in series["StudyInstanceUID"].unique() if (image_root / uid).is_dir())
@@ -41,7 +41,7 @@ def preprocess_all(series_csv: Path, image_root: Path, out: Path, shard: int = 0
     by_study = dict(tuple(series.groupby("StudyInstanceUID")))
 
     start, errors = time.time(), []
-    jobs = [(uid, by_study[uid], image_root, out) for uid in studies]
+    jobs = [(uid, by_study[uid], image_root, out, version) for uid in studies]
     with ProcessPoolExecutor(workers) as pool:
         for i, error in enumerate(pool.map(_process, jobs, chunksize=4), 1):
             if error:
@@ -59,8 +59,10 @@ def main() -> None:
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--num-shards", type=int, default=1)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--version", default="v1")
     args = parser.parse_args()
-    errors = preprocess_all(args.series_csv, args.image_root, args.out, args.shard, args.num_shards, args.workers)
+    errors = preprocess_all(args.series_csv, args.image_root, args.out, args.shard, args.num_shards, args.workers,
+                            args.version)
     for error in errors:
         print(error)
 

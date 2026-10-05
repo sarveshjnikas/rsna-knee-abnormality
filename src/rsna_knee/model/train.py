@@ -19,7 +19,7 @@ import torch
 from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 
-from rsna_knee.config import LABEL_DIR, LABELS, N_SLICES, RAW, SLOTS, SPLITS
+from rsna_knee.config import LABEL_DIR, LABELS, RAW, SLOTS, SPLITS
 from rsna_knee.model.data import StudyDataset, augment
 from rsna_knee.model.network import KneeNet
 
@@ -53,6 +53,7 @@ def main() -> None:
     p.add_argument("--folds", type=Path, default=SPLITS / "folds.csv")
     p.add_argument("--backbone", default="efficientnet_b0")
     p.add_argument("--fusion", default="attention", choices=["attention", "mean"])
+    p.add_argument("--preprocess-version", default="v1", help="recorded so inference prepares test data the same way")
     p.add_argument("--epochs", type=int, default=12)
     p.add_argument("--batch-size", type=int, default=8)
     p.add_argument("--lr", type=float, default=3e-4)
@@ -87,7 +88,11 @@ def main() -> None:
     val_loader = DataLoader(StudyDataset(val_uids, args.processed, labels), **loader_args)
     gold_loader = DataLoader(StudyDataset(gold_uids, args.processed), **loader_args)
 
-    model = KneeNet(n_slots=len(SLOTS), n_slices=N_SLICES, backbone=args.backbone, fusion=args.fusion).to(device)
+    with np.load(args.processed / f"{train_uids[0]}.npz") as sample:
+        n_slices = sample["image"].shape[1]  # the data, not a constant, decides the slice count
+    config = json.loads((out / "config.json").read_text()) | {"n_slices": str(n_slices)}
+    (out / "config.json").write_text(json.dumps(config, indent=2))
+    model = KneeNet(n_slots=len(SLOTS), n_slices=n_slices, backbone=args.backbone, fusion=args.fusion).to(device)
     if args.grad_checkpointing:
         model.encoder.set_grad_checkpointing(True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)

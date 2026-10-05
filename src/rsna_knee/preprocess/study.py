@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from rsna_knee.config import IMAGE_SIZE, N_SLICES, SLOTS
+from rsna_knee.config import PREPROCESS, SLOTS
 from rsna_knee.preprocess.volume import load_volume
 
 
@@ -29,12 +29,13 @@ def choose_series(series: pd.DataFrame, study_dir: Path) -> dict[str, str]:
     return dict(zip(best["slot"], best["SeriesInstanceUID"]))
 
 
-def build_study(series: pd.DataFrame, study_dir: Path) -> tuple[np.ndarray, np.ndarray]:
-    """image: (len(SLOTS), N_SLICES, IMAGE_SIZE, IMAGE_SIZE) uint8; present: (len(SLOTS),) bool."""
-    image = np.zeros((len(SLOTS), N_SLICES, IMAGE_SIZE, IMAGE_SIZE), dtype=np.uint8)
+def build_study(series: pd.DataFrame, study_dir: Path, version: str = "v1") -> tuple[np.ndarray, np.ndarray]:
+    """image: (len(SLOTS), n_slices, image_size, image_size) uint8; present: (len(SLOTS),) bool."""
+    cfg = PREPROCESS[version]
+    image = np.zeros((len(SLOTS), cfg["n_slices"], cfg["image_size"], cfg["image_size"]), dtype=np.uint8)
     present = np.zeros(len(SLOTS), dtype=bool)
     for slot, series_uid in choose_series(series, study_dir).items():
         i = SLOTS.index(slot)
-        image[i] = load_volume(study_dir / series_uid)
+        image[i] = load_volume(study_dir / series_uid, cfg["n_slices"], cfg["image_size"], cfg["crop_mm"], cfg["slice_range"])
         present[i] = True
     return image, present
