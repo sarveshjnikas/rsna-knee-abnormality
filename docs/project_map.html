@@ -188,7 +188,7 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
     <span>Final submission <strong>22 Oct 2026, 23:59 UTC</strong></span>
     <span>Entry and team deadline <strong>15 Oct</strong></span>
     <span id="days-left">Days left <strong>18</strong></span>
-    <span>Map updated <strong>5 Oct, 10:35 IST</strong></span>
+    <span>Map updated <strong>5 Oct, 15:05 IST</strong></span>
   </div>
 </header>
 
@@ -200,8 +200,8 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
   <div class="status-grid">
     <div class="ms"><span class="pill done">done</span><span class="name">M1 Labels</span><span class="when">Oct 4–5</span><span class="done-when">All 4,407 reports labelled ($8.68). Gold test macro AUC 0.863. Folds frozen.</span></div>
     <div class="ms"><span class="pill done">done</span><span class="name">M2 Data</span><span class="when">Oct 5</span><span class="done-when">All 4,407 studies on the GPU cluster, sizes verified byte-for-byte, unpacked in PBS jobs.</span></div>
-    <div class="ms"><span class="pill running">training</span><span class="name">M3 First run</span><span class="when">Oct 7–9</span><span class="done-when">Fold-0 baseline trained; inference notebook submits; first leaderboard score.</span></div>
-    <div class="ms"><span class="pill todo">to do</span><span class="name">M4 Improve</span><span class="when">Oct 10–17</span><span class="done-when">One change at a time, logged; 5 folds; ensemble.</span></div>
+    <div class="ms"><span class="pill done">done · LB 0.916</span><span class="name">M3 First run</span><span class="when">Oct 7–9</span><span class="done-when">Fold-0 baseline trained; inference notebook submits; first leaderboard score.</span></div>
+    <div class="ms"><span class="pill running">self-training + 2nd model</span><span class="name">M4 Improve</span><span class="when">Oct 10–17</span><span class="done-when">One change at a time, logged; 5 folds; ensemble.</span></div>
     <div class="ms"><span class="pill todo">to do</span><span class="name">M5 Final</span><span class="when">Oct 18–20</span><span class="done-when">Final models, runtime check, two final submissions chosen.</span></div>
   </div>
   <div class="live" aria-label="Jobs running now">
@@ -209,7 +209,7 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
     <div class="live-row"><span>Reports labelled by the LLM</span><div class="bar"><span style="width: 100%"></span></div><span class="num">4,407 / 4,407 · $8.68 total</span></div>
     <div class="live-row"><span>Kaggle preprocessing shards</span><div class="bar"><span style="width: 100%"></span></div><span class="num">3 / 3 done · 0 errors</span></div>
     <div class="live-row"><span>Data moved to the GPU cluster</span><div class="bar"><span style="width: 100%"></span></div><span class="num">3 / 3 shards · 4,407 studies</span></div>
-    <div class="live-row"><span>Training folds 0 and 1 (A100 each)</span><div class="bar"><span style="width: 17%"></span></div><span class="num">epoch 2 / 12 · gold AUC 0.799 and rising</span></div>
+    <div class="live-row"><span>Self-training students, folds 0–1</span><div class="bar"><span style="width: 50%"></span></div><span class="num">epoch 6 / 12 · student gold 0.899 vs teacher 0.875</span></div>
   </div>
 </section>
 
@@ -390,7 +390,7 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
 
   <article class="dossier" id="c-model">
     <div class="left">
-      <div class="title-row"><h3>5 · KneeNet and training</h3><span class="pill running">folds 0–1 training</span></div>
+      <div class="title-row"><h3>5 · KneeNet and training</h3><span class="pill done">baseline done · LB 0.916</span></div>
       <p>One ImageNet-pretrained 2D network looks at every slice of every view. Each slice is fed with its two neighbours as the three colour channels, which gives a little 3D context. Per view, learned attention picks out the slices that matter. One transformer layer lets the views exchange information. Views that are missing are masked out, and the result feeds 12 outputs.</p>
       <p>Training uses binary cross-entropy against the soft labels. Augmentation includes left–right flips (safe, because medial stays medial on a mirrored knee) and randomly hiding whole views, so the model copes with studies that lack a view.</p>
     </div>
@@ -403,10 +403,13 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
         <dt>Checkpoint</dt><dd>best fold AUC vs pseudo-labels</dd>
         <dt>Tests</dt><dd>missing view has no effect on output (passes)</dd>
         <dt>Smoke run</dt><dd>2 epochs, 1/3 of data: gold 0.714 → 0.736; 46 GB GPU peak</dd>
-        <dt>Full run, epoch 2</dt><dd>fold val 0.827 · gold 58: 0.799 · ~6 min per epoch</dd>
+        <dt>5-fold baseline</dt><dd>CV 0.865 · gold 58: 0.898 · ~75 min per fold</dd>
+        <dt>Leaderboard</dt><dd>0.916 with 2 folds (gold reads ≈0.03 below LB)</dd>
+        <dt>Self-training</dt><dd>student fold 0 gold 0.899 at epoch 6 vs teacher 0.875</dd>
+        <dt>Second model</dt><dd>ResNet-50 mean pooling: gold 0.878, adds diversity (B0+R50 0.892)</dd>
       </dl>
       <div class="files"><span>model/network.py</span><span>model/data.py</span><span>model/train.py</span></div>
-      <div class="chips"><a class="chip" href="#d8">D8</a><a class="chip" href="#d10">D10</a><a class="chip" href="#d16">D16</a><a class="chip" href="#d17">D17</a></div>
+      <div class="chips"><a class="chip" href="#d8">D8</a><a class="chip" href="#d10">D10</a><a class="chip" href="#d16">D16</a><a class="chip" href="#d17">D17</a><a class="chip" href="#d21">D21</a><a class="chip" href="#d22">D22</a></div>
     </div>
   </article>
 
@@ -455,6 +458,8 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
     <details class="dec" id="d18"><summary><span class="id">D18</span><span class="what">Kaggle preprocesses, a GPU cluster trains, Kaggle submits<span class="why">Move 15 GB instead of 570 GB, and train on A100s.</span></span></summary><div class="body"><p>Three Kaggle CPU notebooks run in parallel, one shard each.</p></div></details>
     <details class="dec" id="d19"><summary><span class="id">D19</span><span class="what">Labelling spend is capped and never paid twice<span class="why">$19 of credit, hard stop at $15.</span></span></summary><div class="body"><p>OpenAI's Tier-1 queue holds 900k tokens for this model, so the reports go through in sequential chunks of 350. A restart first collects batches already in flight.</p></div></details>
     <details class="dec" id="d20"><summary><span class="id">D20</span><span class="what">Silent synovitis borrows from effusion<span class="why">Radiologists report effusion readily and synovitis rarely, and the two travel together.</span></span></summary><div class="body"><p><b>How:</b> only when the report says nothing about synovitis: p = 0.05 + 0.6 × p(effusion). Explicit statements are never overridden.</p><p><b>Evidence:</b> forum: P(synovitis | effusion) 0.63 vs 0.22. Gold dev: Synovitis 0.745 → 0.806, macro 0.880 → 0.885. The rule was decided before looking, and the macro gain alone is within noise.</p></div></details>
+    <details class="dec" id="d21"><summary><span class="id">D21</span><span class="what">Self-training: report labels blended with out-of-fold image predictions<span class="why">The test is scored on image-based labels; a model that has seen thousands of knees corrects what reports miss.</span></span></summary><div class="body"><p><b>How:</b> new label = 0.5 × LLM label + 0.5 × prediction from the one fold model that never trained on that study. Gold studies are never relabelled.</p><p><b>Evidence (gold dev):</b> labels alone 0.885, predictions alone 0.916, 50/50 mix 0.933. Student fold 0 at epoch 6: gold 0.899 against 0.875 for its teacher, matching the whole 5-fold teacher ensemble.</p></div></details>
+    <details class="dec" id="d22"><summary><span class="id">D22</span><span class="what">A second architecture for ensemble diversity<span class="why">Two different models make different mistakes; averaging them helps more than another fold of the same model.</span></span></summary><div class="body"><p>ResNet-50 with plain mean pooling: fold 0 gold 0.878 (B0: 0.870), predictions correlate 0.857 with B0. B0 + ResNet-50 on fold 0 averaged 0.892, above two B0 folds (0.885).</p></div></details>
   </div>
 </section>
 
@@ -477,7 +482,10 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
     <table>
       <thead><tr><th>ID</th><th>Model change</th><th>CV (pseudo)</th><th>Gold 58</th><th>Leaderboard</th></tr></thead>
       <tbody><tr><td class="mono">S0</td><td>Smoke: fold 0, 2 epochs, 1/3 of data</td><td class="n">0.757</td><td class="n">0.736</td><td class="n">–</td></tr>
-<tr><td class="mono">E1</td><td>Baseline KneeNet, EfficientNet-B0, labels v3, 5 folds (running)</td><td class="n">–</td><td class="n">–</td><td class="n">–</td></tr></tbody>
+<tr><td class="mono">E1a</td><td>Baseline B0, folds 0–1</td><td class="n">0.872</td><td class="n">0.885</td><td class="n best">0.916</td></tr>
+<tr><td class="mono">E1</td><td>Baseline B0, all 5 folds</td><td class="n">0.865</td><td class="n">0.898</td><td class="n">scoring</td></tr>
+<tr><td class="mono">A1</td><td>ResNet-50 + plain mean pooling, fold 0</td><td class="n">0.859</td><td class="n">0.878</td><td class="n">–</td></tr>
+<tr><td class="mono">D1</td><td>Self-training round 1 (0.5 LLM + 0.5 out-of-fold image), student fold 0, epoch 6</td><td class="n">–</td><td class="n best">0.899</td><td class="n">–</td></tr></tbody>
     </table>
   </div>
 </section>
