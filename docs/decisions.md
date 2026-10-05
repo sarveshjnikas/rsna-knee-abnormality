@@ -94,3 +94,13 @@ Each entry: the choice, why, the evidence, and what would change it.
 - **Why:** radiologists report effusion readily and synovitis rarely, and the two travel together. Silence about synovitis is therefore uninformative, not negative.
 - **How:** only when the report does not address synovitis: p = 0.05 + 0.6 × p(effusion). An explicit synovitis statement is never overridden.
 - **Evidence:** forum: P(synovitis | effusion) 0.63 vs 0.22 on gold. Gold dev: Synovitis AUC 0.745 → 0.806, macro 0.880 → 0.885 (decided before looking; the macro gain alone is within noise).
+
+## D21. Self-training: blend report labels with out-of-fold image predictions
+- **Why:** labels come from reports, the test is scored on image-based labels. A model that has seen thousands of knees predicts held-out studies closer to the radiologists than the reports do; report and image errors differ.
+- **How:** new label = 0.5 × LLM label + 0.5 × out-of-fold prediction (the one fold model that never trained on the study). Gold studies are never relabelled. One α for all findings in round 1; per-finding α later.
+- **Evidence:** gold dev, labels alone 0.885, 4-fold predictions alone 0.916, 50/50 mix 0.933. Student fold 0 at epoch 6: gold 0.899 vs teacher 0.875 at the same epoch (= the whole 5-fold teacher ensemble, 0.898).
+- **Caveat:** a student's fold-CV is against the blended labels, which were partly produced by teachers that trained on that fold's studies, so it is optimistic; compare students on gold.
+
+## D22. A second architecture for ensemble diversity
+- **What:** ResNet-50 with plain mean pooling over slices and views (no attention or transformer).
+- **Evidence:** fold 0 gold 0.878 vs B0 0.870; predictions correlate 0.857 with B0; B0 + ResNet-50 on fold 0 averaged 0.892, above two B0 folds (0.885).
