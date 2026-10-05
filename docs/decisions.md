@@ -105,3 +105,8 @@ Each entry: the choice, why, the evidence, and what would change it.
 ## D22. A second architecture for ensemble diversity
 - **What:** ResNet-50 with plain mean pooling over slices and views (no attention or transformer).
 - **Evidence:** fold 0 gold 0.878 vs B0 0.870; predictions correlate 0.857 with B0; B0 + ResNet-50 on fold 0 averaged 0.892, above two B0 folds (0.885).
+
+## D23. v2 preprocessing becomes the main data: fixed 150 mm crop, 32 central slices
+- **Why:** with a body crop the scale varies by scanner field of view (one study's axial view used a 186 mm window, others 150 mm), so the same structure has a different size in pixels; a fixed physical window gives every study 0.59 mm/pixel. Central 6–94% of each stack drops skin-only edge slices.
+- **Evidence:** same folds (0–1), same labels: gold test half 0.888 (v1) → 0.898 (v2); dev 0.917 → 0.926. Two v2 models beat the five-model v1 student ensemble on the test half.
+- **Cost:** 33% more slices: 479 s per epoch instead of 360 s, 61 GB GPU memory instead of 46.
