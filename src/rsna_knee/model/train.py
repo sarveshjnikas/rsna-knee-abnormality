@@ -59,6 +59,7 @@ def main() -> None:
     p.add_argument("--workers", type=int, default=8)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--limit", type=int, default=0, help="debug: use only this many training studies")
+    p.add_argument("--grad-checkpointing", action="store_true", help="trade compute for GPU memory")
     args = p.parse_args()
 
     torch.manual_seed(args.seed)
@@ -86,6 +87,8 @@ def main() -> None:
     gold_loader = DataLoader(StudyDataset(gold_uids, args.processed), **loader_args)
 
     model = KneeNet(n_slots=len(SLOTS), n_slices=N_SLICES, backbone=args.backbone).to(device)
+    if args.grad_checkpointing:
+        model.encoder.set_grad_checkpointing(True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     total_steps = args.epochs * len(train_loader)
     warmup = len(train_loader)
@@ -116,6 +119,7 @@ def main() -> None:
         gold_scores, _ = predict(model, gold_loader, device)
         row = {
             "epoch": epoch, "train_loss": float(np.mean(losses)), "seconds": round(time.time() - start),
+            "gpu_peak_gb": round(torch.cuda.max_memory_allocated() / 1e9, 1) if device == "cuda" else None,
             "val_auc": macro_auc(val_targets, val_scores), "gold_auc": macro_auc(gold_targets, gold_scores),
         }
         history.append(row)
