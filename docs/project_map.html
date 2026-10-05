@@ -188,7 +188,7 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
     <span>Final submission <strong>22 Oct 2026, 23:59 UTC</strong></span>
     <span>Entry and team deadline <strong>15 Oct</strong></span>
     <span id="days-left">Days left <strong>18</strong></span>
-    <span>Map updated <strong>5 Oct, 17:10 IST</strong></span>
+    <span>Map updated <strong>5 Oct, 20:40 IST</strong></span>
   </div>
 </header>
 
@@ -228,6 +228,10 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
         <tr><td class="mono">A1</td><td>ResNet-50 plain pooling, 1 fold</td><td class="n">0.878</td><td class="n muted">0.908 exp</td><td class="n muted">3,195</td></tr>
         <tr><td class="mono">A1+</td><td>E1 + ResNet-50 fold 0</td><td class="n">0.900</td><td class="n muted">0.930 exp</td><td class="n muted">2,642</td></tr>
         <tr><td class="mono">D1</td><td>Self-training round 1 students, 5 folds, flip TTA</td><td class="n best">0.908</td><td class="n best">0.929</td><td class="n best">2,686</td></tr>
+        <tr><td class="mono">A2+</td><td>D1 + ResNet-50 students (2 folds), averaged by family</td><td class="n">0.911</td><td class="n muted">~0.935 exp</td><td class="n muted">–</td></tr>
+        <tr><td class="mono">P2</td><td>v2 data (150 mm crop, 32 central slices), students folds 0–1 · test half 0.898 vs 0.888 for v1</td><td class="n best">0.913</td><td class="n muted">~0.938 exp (5 folds)</td><td class="n muted">–</td></tr>
+        <tr><td class="mono">P2a</td><td>D1 + v2 students (2 folds), by family · submitted</td><td class="n">0.914</td><td class="n muted">~0.936 exp</td><td class="n muted">scoring</td></tr>
+        <tr><td class="mono">L4</td><td>Public label sets blended in (after self-training mix)</td><td class="n">no gain</td><td class="n muted">–</td><td class="n muted">dropped</td></tr>
       </tbody>
     </table>
   </div>
@@ -480,6 +484,8 @@ footer { font-size: var(--step--1); color: var(--muted); border-top: 1px solid v
     <details class="dec" id="d20"><summary><span class="id">D20</span><span class="what">Silent synovitis borrows from effusion<span class="why">Radiologists report effusion readily and synovitis rarely, and the two travel together.</span></span></summary><div class="body"><p><b>How:</b> only when the report says nothing about synovitis: p = 0.05 + 0.6 × p(effusion). Explicit statements are never overridden.</p><p><b>Evidence:</b> forum: P(synovitis | effusion) 0.63 vs 0.22. Gold dev: Synovitis 0.745 → 0.806, macro 0.880 → 0.885. The rule was decided before looking, and the macro gain alone is within noise.</p></div></details>
     <details class="dec" id="d21"><summary><span class="id">D21</span><span class="what">Self-training: report labels blended with out-of-fold image predictions<span class="why">The test is scored on image-based labels; a model that has seen thousands of knees corrects what reports miss.</span></span></summary><div class="body"><p><b>How:</b> new label = 0.5 × LLM label + 0.5 × prediction from the one fold model that never trained on that study. Gold studies are never relabelled.</p><p><b>Evidence (gold dev):</b> labels alone 0.885, predictions alone 0.916, 50/50 mix 0.933. Student fold 0 at epoch 6: gold 0.899 against 0.875 for its teacher, matching the whole 5-fold teacher ensemble.</p></div></details>
     <details class="dec" id="d22"><summary><span class="id">D22</span><span class="what">A second architecture for ensemble diversity<span class="why">Two different models make different mistakes; averaging them helps more than another fold of the same model.</span></span></summary><div class="body"><p>ResNet-50 with plain mean pooling: fold 0 gold 0.878 (B0: 0.870), predictions correlate 0.857 with B0. B0 + ResNet-50 on fold 0 averaged 0.892, above two B0 folds (0.885).</p></div></details>
+    <details class="dec" id="d23"><summary><span class="id">D23</span><span class="what">v2 data: fixed 150 mm crop, 32 central slices<span class="why">Same scale (0.59 mm per pixel) in every study, and slices through the joint instead of skin.</span></span></summary><div class="body"><p><b>Evidence:</b> same folds, same labels: gold test half 0.888 (v1) → 0.898 (v2). Two v2 models beat the five-model v1 ensemble on the test half.</p><p><b>Cost:</b> 479 s per epoch instead of 360 s; 61 GB GPU memory instead of 46.</p></div></details>
+    <details class="dec" id="d24"><summary><span class="id">D24</span><span class="what">Public label sets are not added<span class="why">They help alone, but not once mixed with our image teacher.</span></span></summary><div class="body"><p>Alone, stevenleehans's labels beat ours on the test half (0.879 vs 0.863). After the 50/50 mix with our out-of-fold image predictions, which is what students train on: 0.906 vs 0.907. The image teacher already supplies what better report reading adds.</p></div></details>
   </div>
 </section>
 
