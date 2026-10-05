@@ -1,5 +1,17 @@
 # Experiments
 
+## Scoreboard (what worked)
+
+Val = gold-58 macro AUC of the run's ensemble (models never train on the 58). LB = public leaderboard; *exp* = expected, val + 0.03 (calibrated on the first two submissions).
+
+| # | What changed | Val (gold-58) | LB |
+|---|---|---|---|
+| E1a | Baseline: B0 attention, labels v3, 2 folds | 0.885 | **0.916** |
+| E1 | Baseline, 5 folds | 0.896 | **0.924** |
+| A1 | ResNet-50 plain pooling, 1 fold | 0.878 | 0.908 *exp* |
+| A1+ | E1 + ResNet-50 fold 0 | 0.900 | 0.930 *exp* |
+| D1 | Self-training round 1 students (0.5 LLM + 0.5 out-of-fold), 5 folds, flip TTA at inference | 0.908 | 0.938 *exp* |
+
 One change per row. CV = mean OOF macro AUC vs pseudo-labels (site-grouped 5-fold). Gold = macro AUC vs gold test 29 (looked at rarely).
 
 ## Labeller (macro AUC vs gold)
