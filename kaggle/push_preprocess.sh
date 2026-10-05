@@ -4,11 +4,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 USER_NAME="$(kaggle config view | sed -n 's/^- username: //p')"
 NUM_SHARDS="${1:-3}"
+VERSION="${2:-v1}"
+SUFFIX=$([ "$VERSION" = "v1" ] && echo "" || echo "-$VERSION")
 for SHARD in $(seq 0 $((NUM_SHARDS - 1))); do
-  DIR="$ROOT/kaggle/.build/preprocess_$SHARD" && rm -rf "$DIR" && mkdir -p "$DIR"
-  sed -e "s/{shard}/$SHARD/" -e "s/{num_shards}/$NUM_SHARDS/" "$ROOT/kaggle/preprocess/kernel.py" > "$DIR/kernel.py"
+  DIR="$ROOT/kaggle/.build/preprocess${SUFFIX}_$SHARD" && rm -rf "$DIR" && mkdir -p "$DIR"
+  sed -e "s/{shard}/$SHARD/" -e "s/{num_shards}/$NUM_SHARDS/" -e "s/{version}/$VERSION/" "$ROOT/kaggle/preprocess/kernel.py" > "$DIR/kernel.py"
   cat > "$DIR/kernel-metadata.json" <<JSON
-{"id": "$USER_NAME/rsna-knee-preprocess-$SHARD", "title": "rsna-knee-preprocess-$SHARD", "code_file": "kernel.py",
+{"id": "$USER_NAME/rsna-knee-preprocess$SUFFIX-$SHARD", "title": "rsna-knee-preprocess$SUFFIX-$SHARD", "code_file": "kernel.py",
  "language": "python", "kernel_type": "script", "is_private": true, "enable_gpu": false, "enable_internet": true,
  "dataset_sources": ["$USER_NAME/rsna-knee-code"], "competition_sources": ["rsna-knee-abnormality-detection"]}
 JSON
