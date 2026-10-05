@@ -28,6 +28,7 @@ def fold_checkpoints(models_dir: Path) -> list[dict]:
         version = config.get("preprocess", "v1")
         found.append({
             "path": checkpoint,
+            "family": checkpoint.parent.parent.name,  # one training run = one model family
             "backbone": config.get("backbone", "efficientnet_b0"),
             "fusion": config.get("fusion", "attention"),
             "version": version,
@@ -75,21 +76,26 @@ def main() -> None:
     print(f"{len(checkpoints)} fold models: {[str(c['path']) for c in checkpoints]}", flush=True)
     n_series_studies = pd.read_csv(args.comp_dir / "test_series.csv")["StudyInstanceUID"].nunique()
 
-    weighted, total_models = [], 0
-    for version in sorted({c["version"] for c in checkpoints}):  # prepare the test set once per version
-        work = args.work / version
-        errors = preprocess_all(args.comp_dir / "test_series.csv", args.comp_dir / "test_series", work,
-                                workers=args.workers, version=version)
-        for error in errors:
-            print(error, flush=True)
-        if len(errors) > 0.05 * max(n_series_studies, 1):  # a broken decoder must fail the run, not hide in averages
-            raise RuntimeError(f"{len(errors)} of {n_series_studies} test studies failed preprocessing ({version})")
-        group = [c for c in checkpoints if c["version"] == version]
+    prepared: dict[str, Path] = {}
+    family_predictions = []
+    for family in sorted({c["family"] for c in checkpoints}):
+        group = [c for c in checkpoints if c["family"] == family]
+        version = group[0]["version"]
+        if version not in prepared:  # prepare the test set once per preprocessing version
+            work = args.work / version
+            errors = preprocess_all(args.comp_dir / "test_series.csv", args.comp_dir / "test_series", work,
+                                    workers=args.workers, version=version)
+            for error in errors:
+                print(error, flush=True)
+            if len(errors) > 0.05 * max(n_series_studies, 1):  # a broken decoder must fail the run, not hide in averages
+                raise RuntimeError(f"{len(errors)} of {n_series_studies} test studies failed preprocessing ({version})")
+            prepared[version] = work
+        work = prepared[version]
         ready = [uid for uid in test["StudyInstanceUID"] if (work / f"{uid}.npz").exists()]
-        part = predict(work, ready, group).set_index("StudyInstanceUID")[LABELS]
-        weighted.append(part * len(group))
-        total_models += len(group)
-    predictions = (sum(weighted) / total_models).reset_index()  # every model counts equally
+        family_predictions.append(predict(work, ready, group).set_index("StudyInstanceUID")[LABELS])
+        print(f"family {family}: {len(group)} models, preprocessing {version}", flush=True)
+    # Average within a family (its folds), then give every family an equal vote.
+    predictions = (sum(family_predictions) / len(family_predictions)).reset_index()
 
     # A study that failed preprocessing still needs a row: use the mean prediction (ranks it in the middle).
     submission = test[["StudyInstanceUID"]].merge(predictions, on="StudyInstanceUID", how="left")
