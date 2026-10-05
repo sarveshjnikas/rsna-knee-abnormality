@@ -20,24 +20,24 @@ from rsna_knee.model.network import KneeNet
 from rsna_knee.preprocess.run import preprocess_all
 
 
-def fold_checkpoints(models_dir: Path) -> list[tuple[Path, str]]:
-    """(model.pt, backbone) for every fold directory under models_dir."""
+def fold_checkpoints(models_dir: Path) -> list[tuple[Path, str, str]]:
+    """(model.pt, backbone, fusion) for every fold directory under models_dir."""
     found = []
     for checkpoint in sorted(models_dir.glob("**/fold*/model.pt")):
         config = json.loads((checkpoint.parent / "config.json").read_text())
-        found.append((checkpoint, config.get("backbone", "efficientnet_b0")))
+        found.append((checkpoint, config.get("backbone", "efficientnet_b0"), config.get("fusion", "attention")))
     return found
 
 
 @torch.no_grad()
-def predict(processed: Path, uids: list[str], checkpoints: list[tuple[Path, str]], batch_size: int = 4,
+def predict(processed: Path, uids: list[str], checkpoints: list[tuple[Path, str, str]], batch_size: int = 4,
             workers: int = 2) -> pd.DataFrame:
     """Mean sigmoid probability over fold models, one row per study."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
     loader = DataLoader(StudyDataset(uids, processed), batch_size=batch_size, num_workers=workers)
     total = np.zeros((len(uids), len(LABELS)))
-    for checkpoint, backbone in checkpoints:
-        model = KneeNet(n_slots=len(SLOTS), n_slices=N_SLICES, backbone=backbone, pretrained=False)
+    for checkpoint, backbone, fusion in checkpoints:
+        model = KneeNet(n_slots=len(SLOTS), n_slices=N_SLICES, backbone=backbone, pretrained=False, fusion=fusion)
         model.load_state_dict(torch.load(checkpoint, map_location="cpu"))
         model.to(device).eval()
         rows = []
@@ -68,7 +68,7 @@ def main() -> None:
         raise RuntimeError(f"{len(errors)} of {n_series_studies} test studies failed preprocessing")
 
     checkpoints = fold_checkpoints(args.models)
-    print(f"{len(checkpoints)} fold models: {[str(c) for c, _ in checkpoints]}", flush=True)
+    print(f"{len(checkpoints)} fold models: {[str(c[0]) for c in checkpoints]}", flush=True)
     ready = [uid for uid in test["StudyInstanceUID"] if (args.work / f"{uid}.npz").exists()]
     predictions = predict(args.work, ready, checkpoints)
 

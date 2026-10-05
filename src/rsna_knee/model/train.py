@@ -52,6 +52,7 @@ def main() -> None:
     p.add_argument("--labels", type=Path, default=LABEL_DIR / "labels_v2_gpt-6.1-sol.csv")
     p.add_argument("--folds", type=Path, default=SPLITS / "folds.csv")
     p.add_argument("--backbone", default="efficientnet_b0")
+    p.add_argument("--fusion", default="attention", choices=["attention", "mean"])
     p.add_argument("--epochs", type=int, default=12)
     p.add_argument("--batch-size", type=int, default=8)
     p.add_argument("--lr", type=float, default=3e-4)
@@ -86,7 +87,7 @@ def main() -> None:
     val_loader = DataLoader(StudyDataset(val_uids, args.processed, labels), **loader_args)
     gold_loader = DataLoader(StudyDataset(gold_uids, args.processed), **loader_args)
 
-    model = KneeNet(n_slots=len(SLOTS), n_slices=N_SLICES, backbone=args.backbone).to(device)
+    model = KneeNet(n_slots=len(SLOTS), n_slices=N_SLICES, backbone=args.backbone, fusion=args.fusion).to(device)
     if args.grad_checkpointing:
         model.encoder.set_grad_checkpointing(True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)

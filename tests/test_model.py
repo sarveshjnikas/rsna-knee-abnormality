@@ -37,3 +37,14 @@ def test_augment_keeps_shape_range_and_one_view():
     out, kept = augment(image, present, view_dropout=1.0)
     assert out.shape == image.shape and out.min() >= 0 and out.max() <= 1
     assert (kept.sum(dim=1) >= 1).all()
+
+
+def test_mean_fusion_ignores_missing_views():
+    torch.manual_seed(0)
+    model = KneeNet(n_slots=S, n_slices=N, backbone="resnet18", pretrained=False, fusion="mean").eval()
+    image, present = torch.rand(1, S, N, H, H), torch.tensor([[False, True, True, True]])
+    other = image.clone()
+    other[:, 0] = torch.rand(N, H, H)
+    with torch.no_grad():
+        assert model(image, present).shape == (1, 12)
+        assert torch.allclose(model(image, present), model(other, present), atol=1e-5)

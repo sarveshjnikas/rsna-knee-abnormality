@@ -36,8 +36,9 @@ class AttentionPool(nn.Module):
 
 class KneeNet(nn.Module):
     def __init__(self, n_slots: int, n_slices: int, backbone: str = "efficientnet_b0", pretrained: bool = True,
-                 n_labels: int = len(LABELS), dropout: float = 0.2):
+                 n_labels: int = len(LABELS), dropout: float = 0.2, fusion: str = "attention"):
         super().__init__()
+        self.fusion_kind = fusion  # "attention": attention pools + transformer; "mean": plain masked means
         self.encoder = timm.create_model(backbone, pretrained=pretrained, num_classes=0)
         dim = self.encoder.num_features
         self.slice_position = nn.Parameter(torch.zeros(1, n_slices, dim))
@@ -52,9 +53,13 @@ class KneeNet(nn.Module):
         """image: (B, S, N, H, W) float in [0, 1]; present: (B, S) bool -> logits (B, n_labels)."""
         b, s, n, h, w = image.shape
         x = neighbour_channels(image).reshape(b * s * n, 3, h, w)
-        x = self.encoder((x - self.mean) / self.std).reshape(b, s, n, -1) + self.slice_position
+        x = self.encoder((x - self.mean) / self.std).reshape(b, s, n, -1)
+        weights = present.unsqueeze(-1).float()
+        if self.fusion_kind == "mean":  # simple baseline: average slices, then average present views
+            fused = (x.mean(dim=2) * weights).sum(dim=1) / weights.sum(dim=1).clamp(min=1)
+            return self.head(fused)
+        x = x + self.slice_position
         slots = torch.stack([pool(x[:, i]) for i, pool in enumerate(self.pools)], dim=1) + self.slot_type
         slots = self.fusion(slots, src_key_padding_mask=~present)
-        weights = present.unsqueeze(-1).float()
         fused = (slots * weights).sum(dim=1) / weights.sum(dim=1).clamp(min=1)
         return self.head(fused)
