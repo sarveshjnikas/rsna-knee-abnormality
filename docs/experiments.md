@@ -14,7 +14,9 @@ One change per row. CV = mean OOF macro AUC vs pseudo-labels (site-grouped 5-fol
 
 | ID | Date | Change | CV | Gold | LB | Notes |
 |---|---|---|---|---|---|---|
-| E1a | Oct 5 | Baseline B0, labels v3: folds 0–1 of 5 (best epoch by fold val) | 0.872 (2 folds) | 0.885 (2-model avg; dev 0.896, test 0.876) | – | single folds 0.870 / 0.887; 2-model avg ≈ mean, little ensemble gain; weakest gold labels Synovitis 0.746, Lateral Meniscus 0.785 |
+| E1a | Oct 5 | Baseline B0, labels v3: folds 0–1 of 5 (best epoch by fold val) | 0.872 (2 folds) | 0.885 (2-model avg; dev 0.896, test 0.876) | **0.916** | single folds 0.870 / 0.887; 2-model avg ≈ mean, little ensemble gain; weakest gold labels Synovitis 0.746, Lateral Meniscus 0.785 |
+| E1b | Oct 5 | Same baseline, folds 0–3 | 0.869 (4 folds) | 0.897 (dev 0.916, test 0.887) | – | gold-58 reads ≈0.03 below LB (E1a: 0.885 gold → 0.916 LB) |
+| D0 | Oct 5 | Label-mix check on gold dev (no training): α·LLM + (1−α)·4-fold image prediction | – | dev: α=1 0.885, α=0.5 **0.933**, α=0 0.916 | – | the two sources err differently → basis for self-training (α = 0.5 for round 1) |
 | S0 | Oct 5 | Smoke: fold 0, 2 epochs, shard 0 only (~1,180 train studies) | 0.757 (fold 0) | 0.736 (58) | – | loss 0.534 → 0.486; 46 GB GPU peak at batch 8; ~2–3 min/epoch |
 
 ## Queue (M4, one change at a time, ordered by expected gain per GPU-hour)
