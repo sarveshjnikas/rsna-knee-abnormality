@@ -83,7 +83,7 @@ Each entry: the choice, why, the evidence, and what would change it.
 - **Augmentation:** horizontal flip (labels are anatomical, a mirrored left knee is a right knee; QA of 1,469 preprocessed studies shows sagittal images facing left at some hospitals and right at others), zoom crop 0.85–1, per-view intensity gain/offset, view dropout 0.15 (test studies can lack views).
 - **Checkpoint** chosen on the fold's validation AUC against pseudo-labels; the 58 gold studies are never trained on and are reported as an honest check.
 
-## D18. Compute split: Kaggle CPU preprocesses, the GPU cluster trains, Kaggle GPU submits
+## D18. Compute split: Kaggle CPU preprocesses, a GPU cluster trains, Kaggle GPU submits
 - **Why:** the 570 GB of DICOMs already sit on Kaggle, so only the 15 GB of arrays move. Cluster A100s train. The submission must run as a Kaggle notebook anyway, with the same preprocessing code.
 
 ## D19. Labelling spend is capped and never paid twice
