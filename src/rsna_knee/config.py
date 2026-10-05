@@ -35,7 +35,9 @@ IMAGE_SIZE = 256  # pixels per side after cropping and padding to square
 # preprocesses the test set with that same version.
 #   v1: crop to the body (scale varies by study), slices across the whole stack
 #   v2: fixed physical crop around the knee (same mm per pixel everywhere), central slices only
+#   v3: v2 at higher resolution (320 px, 0.47 mm per pixel instead of 0.59)
 PREPROCESS = {
     "v1": {"n_slices": 24, "image_size": 256, "crop_mm": None, "slice_range": (0.0, 1.0)},
     "v2": {"n_slices": 32, "image_size": 256, "crop_mm": 150.0, "slice_range": (0.06, 0.94)},
+    "v3": {"n_slices": 32, "image_size": 320, "crop_mm": 150.0, "slice_range": (0.06, 0.94)},  # 0.47 mm/pixel
 }
