@@ -41,6 +41,9 @@ def main() -> None:
 
     per_run = []
     for run in args.runs:
+        unfinished = [d.name for d in sorted(run.glob("fold*")) if d.is_dir() and not (d / "history.json").exists()]
+        if unfinished:  # a training fold already has an oof.csv from its best epoch so far
+            raise ValueError(f"{run}: folds still training: {unfinished}")
         run_oof = pd.concat([pd.read_csv(f) for f in sorted(run.glob("fold*/oof.csv"))], ignore_index=True)
         if run_oof["StudyInstanceUID"].duplicated().any():
             raise ValueError(f"{run}: a study has more than one out-of-fold prediction")
