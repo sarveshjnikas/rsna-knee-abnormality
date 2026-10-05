@@ -33,6 +33,7 @@ Each entry: the choice, why, the evidence, and what would change it.
 ## D6. Cross-validation: 5 folds over the 4,349, grouped by site, stratified over all labels
 - **Why:** validation must look like the test. Same-hospital studies in train and validation inflate scores.
 - **Evidence:** contributing sites in Italy and Mongolia, yet no Italian or Mongolian training report → the test likely has unseen hospitals.
+- **Frozen folds (Oct 5, labels v3):** 867–873 studies per fold; every label's share within a few points across folds.
 - **Site proxy:** no site column exists. Language where one hospital is credited for it (el, bg, de, nl); else report template with ≥20 reports; else the study is its own group. 29 site groups, largest 368 studies; folds 881–882 studies.
 - **How:** greedy assignment, largest groups first, each to the fold with the least label/size imbalance (no library does grouped + multilabel).
 
