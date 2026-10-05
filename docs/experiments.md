@@ -16,6 +16,7 @@ Val = gold-58 macro AUC of the run's ensemble (models never train on the 58). LB
 | L4b | Same, after mixing 50/50 with our B0 image teacher | ours 0.907 vs ours+steven v4 0.906 (test) | – | – |
 | A2 | ResNet-50 plain pooling students (labels r1), folds 0–1 | 0.898 (dev 0.914 / test 0.880) | – | – |
 | A2+ | D1 + A2 averaged 50/50 by family | 0.911 (dev 0.924 / test **0.896**) | ~0.935 *exp* (test +0.006) | – |
+| P2a | D1 + v2 students (folds 0–1), averaged by family | 0.914 (dev 0.927 / test 0.897) | **0.931** | **2,652** |
 | D1 | Self-training round 1 students (0.5 LLM + 0.5 out-of-fold), 5 folds, flip TTA at inference | 0.908 (dev 0.922 / test 0.890) | **0.929** | **2,686** |
 
 One change per row. CV = mean OOF macro AUC vs pseudo-labels (site-grouped 5-fold). Gold = macro AUC vs gold test 29 (looked at rarely).
