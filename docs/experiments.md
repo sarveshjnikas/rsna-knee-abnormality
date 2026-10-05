@@ -14,6 +14,7 @@ One change per row. CV = mean OOF macro AUC vs pseudo-labels (site-grouped 5-fol
 
 | ID | Date | Change | CV | Gold | LB | Notes |
 |---|---|---|---|---|---|---|
+| E1a | Oct 5 | Baseline B0, labels v3: folds 0–1 of 5 (best epoch by fold val) | 0.872 (2 folds) | 0.885 (2-model avg; dev 0.896, test 0.876) | – | single folds 0.870 / 0.887; 2-model avg ≈ mean, little ensemble gain; weakest gold labels Synovitis 0.746, Lateral Meniscus 0.785 |
 | S0 | Oct 5 | Smoke: fold 0, 2 epochs, shard 0 only (~1,180 train studies) | 0.757 (fold 0) | 0.736 (58) | – | loss 0.534 → 0.486; 46 GB GPU peak at batch 8; ~2–3 min/epoch |
 
 ## Queue (M4, one change at a time, ordered by expected gain per GPU-hour)
