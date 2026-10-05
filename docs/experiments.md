@@ -7,10 +7,10 @@ Val = gold-58 macro AUC of the run's ensemble (models never train on the 58). LB
 | # | What changed | Val (gold-58) | LB | Rank (Oct 5) |
 |---|---|---|---|---|
 | E1a | Baseline: B0 attention, labels v3, 2 folds | 0.885 | **0.916** | 3,011 |
-| E1 | Baseline, 5 folds | 0.896 | **0.924** | **2,797** |
+| E1 | Baseline, 5 folds | 0.896 (dev 0.911 / test 0.886) | **0.924** | 2,797 |
 | A1 | ResNet-50 plain pooling, 1 fold | 0.878 | 0.908 *exp* | 3,195 |
 | A1+ | E1 + ResNet-50 fold 0 | 0.900 | 0.930 *exp* | 2,642 |
-| D1 | Self-training round 1 students (0.5 LLM + 0.5 out-of-fold), 5 folds, flip TTA at inference | 0.908 | 0.938 *exp* | ~2,121 |
+| D1 | Self-training round 1 students (0.5 LLM + 0.5 out-of-fold), 5 folds, flip TTA at inference | 0.908 (dev 0.922 / test 0.890) | **0.929** | **2,686** |
 
 One change per row. CV = mean OOF macro AUC vs pseudo-labels (site-grouped 5-fold). Gold = macro AUC vs gold test 29 (looked at rarely).
 

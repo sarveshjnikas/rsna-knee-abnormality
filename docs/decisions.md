@@ -99,6 +99,7 @@ Each entry: the choice, why, the evidence, and what would change it.
 - **Why:** labels come from reports, the test is scored on image-based labels. A model that has seen thousands of knees predicts held-out studies closer to the radiologists than the reports do; report and image errors differ.
 - **How:** new label = 0.5 × LLM label + 0.5 × out-of-fold prediction (the one fold model that never trained on the study). Gold studies are never relabelled. One α for all findings in round 1; per-finding α later.
 - **Evidence:** gold dev, labels alone 0.885, 4-fold predictions alone 0.916, 50/50 mix 0.933. Student fold 0 at epoch 6: gold 0.899 vs teacher 0.875 at the same epoch (= the whole 5-fold teacher ensemble, 0.898).
+- **Leaderboard (D1):** 0.929 vs 0.924 baseline, +0.005, much less than gold-58 overall suggested (+0.012). The untouched gold test half moved +0.004, matching the leaderboard; the dev half (+0.011) was inflated because α was chosen on it. Lesson: predict LB moves from gold **test**, not gold overall.
 - **Caveat:** a student's fold-CV is against the blended labels, which were partly produced by teachers that trained on that fold's studies, so it is optimistic; compare students on gold.
 
 ## D22. A second architecture for ensemble diversity
