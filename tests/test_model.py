@@ -48,3 +48,18 @@ def test_mean_fusion_ignores_missing_views():
     with torch.no_grad():
         assert model(image, present).shape == (1, 12)
         assert torch.allclose(model(image, present), model(other, present), atol=1e-5)
+
+
+def test_distilled_labels_blend_and_reject_duplicates():
+    import pandas as pd
+    import pytest
+
+    from rsna_knee.config import LABELS
+    from rsna_knee.model.distill import distilled_labels
+
+    report = pd.DataFrame({"StudyInstanceUID": ["a", "b"], **{l: [1.0, 0.0] for l in LABELS}})
+    oof = pd.DataFrame({"StudyInstanceUID": ["a", "b"], **{l: [0.0, 1.0] for l in LABELS}})
+    out = distilled_labels(report, oof, alpha=0.5)
+    assert (out[LABELS] == 0.5).all().all()
+    with pytest.raises(ValueError):
+        distilled_labels(report, pd.concat([oof, oof]), alpha=0.5)
