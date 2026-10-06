@@ -52,7 +52,7 @@ def main() -> None:
     p.add_argument("--labels", type=Path, default=LABEL_DIR / "labels_v2_gpt-6.1-sol.csv")
     p.add_argument("--folds", type=Path, default=SPLITS / "folds.csv")
     p.add_argument("--backbone", default="efficientnet_b0")
-    p.add_argument("--fusion", default="attention", choices=["attention", "mean"])
+    p.add_argument("--fusion", default="attention", choices=["attention", "mean", "label"])
     p.add_argument("--preprocess-version", default="v1", help="recorded so inference prepares test data the same way")
     p.add_argument("--epochs", type=int, default=12)
     p.add_argument("--batch-size", type=int, default=8)

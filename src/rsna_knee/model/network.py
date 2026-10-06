@@ -6,6 +6,9 @@
 3. Per slot, learned attention pools the slices (findings sit in a few slices only).
 4. Slot embeddings get a slot-type embedding; missing slots are masked out; a
    transformer layer lets views exchange information; masked mean -> head -> 12 logits.
+
+fusion="label" instead gives every finding its own attention over all slices of all views
+(an ACL tear shows on two slices, osteoarthritis on many; one shared pooling makes them compete).
 """
 
 import timm
@@ -34,11 +37,27 @@ class AttentionPool(nn.Module):
         return (weights * x).sum(dim=1)
 
 
+class LabelAttention(nn.Module):
+    """One softmax attention per label over all (view, slice) tokens, then one linear output per label."""
+
+    def __init__(self, dim: int, n_labels: int, dropout: float):
+        super().__init__()
+        self.score = nn.Sequential(nn.Linear(dim, dim // 4), nn.Tanh(), nn.Linear(dim // 4, n_labels))
+        self.norm, self.drop = nn.LayerNorm(dim), nn.Dropout(dropout)
+        self.weight = nn.Parameter(torch.randn(n_labels, dim) * dim ** -0.5)
+        self.bias = nn.Parameter(torch.zeros(n_labels))
+
+    def forward(self, tokens: torch.Tensor, valid: torch.Tensor) -> torch.Tensor:  # (B, T, D), (B, T) -> (B, L)
+        scores = self.score(tokens).masked_fill(~valid.unsqueeze(-1), float("-inf"))
+        pooled = torch.einsum("btl,btd->bld", scores.softmax(dim=1), tokens)
+        return (self.drop(self.norm(pooled)) * self.weight).sum(-1) + self.bias
+
+
 class KneeNet(nn.Module):
     def __init__(self, n_slots: int, n_slices: int, backbone: str = "efficientnet_b0", pretrained: bool = True,
                  n_labels: int = len(LABELS), dropout: float = 0.2, fusion: str = "attention"):
         super().__init__()
-        self.fusion_kind = fusion  # "attention": attention pools + transformer; "mean": plain masked means
+        self.fusion_kind = fusion  # "attention": pools + transformer; "mean": plain masked means; "label": per-label attention
         self.encoder = timm.create_model(backbone, pretrained=pretrained, num_classes=0)
         dim = self.encoder.num_features
         self.slice_position = nn.Parameter(torch.zeros(1, n_slices, dim))
@@ -46,6 +65,8 @@ class KneeNet(nn.Module):
         self.slot_type = nn.Parameter(torch.zeros(1, n_slots, dim))
         self.fusion = nn.TransformerEncoderLayer(dim, nhead=8, dim_feedforward=dim * 2, dropout=dropout, batch_first=True)
         self.head = nn.Sequential(nn.LayerNorm(dim), nn.Dropout(dropout), nn.Linear(dim, n_labels))
+        if fusion == "label":
+            self.label_attention = LabelAttention(dim, n_labels, dropout)
         self.register_buffer("mean", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
         self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
 
@@ -59,6 +80,9 @@ class KneeNet(nn.Module):
             fused = (x.mean(dim=2) * weights).sum(dim=1) / weights.sum(dim=1).clamp(min=1)
             return self.head(fused)
         x = x + self.slice_position
+        if self.fusion_kind == "label":  # every (view, slice) is a token; missing views are masked out
+            tokens = (x + self.slot_type.unsqueeze(2)).reshape(b, s * n, -1)
+            return self.label_attention(tokens, present.repeat_interleave(n, dim=1))
         slots = torch.stack([pool(x[:, i]) for i, pool in enumerate(self.pools)], dim=1) + self.slot_type
         slots = self.fusion(slots, src_key_padding_mask=~present)
         fused = (slots * weights).sum(dim=1) / weights.sum(dim=1).clamp(min=1)

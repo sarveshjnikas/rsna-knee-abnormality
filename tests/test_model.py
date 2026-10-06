@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from rsna_knee.model.data import augment
@@ -39,9 +40,10 @@ def test_augment_keeps_shape_range_and_one_view():
     assert (kept.sum(dim=1) >= 1).all()
 
 
-def test_mean_fusion_ignores_missing_views():
+@pytest.mark.parametrize("fusion", ["mean", "label"])
+def test_simple_fusions_ignore_missing_views(fusion):
     torch.manual_seed(0)
-    model = KneeNet(n_slots=S, n_slices=N, backbone="resnet18", pretrained=False, fusion="mean").eval()
+    model = KneeNet(n_slots=S, n_slices=N, backbone="resnet18", pretrained=False, fusion=fusion).eval()
     image, present = torch.rand(1, S, N, H, H), torch.tensor([[False, True, True, True]])
     other = image.clone()
     other[:, 0] = torch.rand(N, H, H)
