@@ -21,6 +21,8 @@ Val = gold-58 macro AUC of the run's ensemble (models never train on the 58). LB
 | P2 5f | v2 students (labels r1), 5 folds | 0.919 (dev 0.929 / test 0.900) | **0.934** | – |
 | R2 | Self-training round 2 (0.3 LLM + 0.7 mean of v1+v2 students' OOF), v2, folds 0–1 | 0.921 (dev 0.931 / test **0.905**) vs r1 same folds 0.913 (test 0.898) | – | – |
 | L24 | 24 epochs instead of 12 (v2, r1, fold 0) | 0.917 (dev 0.933 / test 0.896) vs 12 ep 0.915 (test 0.897) | – (not worth 2× time) | – |
+| R2 5f | Round-2 students, all 5 folds | 0.922 (dev 0.933 / test 0.904) vs r1 0.919 (test 0.900) | submitting | – |
+| A3 | ResNet-50 mean pooling on v2, round-2 labels, fold 0 | 0.905 (test 0.886) vs B0 0.920; B0+R50 0.917 < B0 alone; rank corr 0.92 (was 0.86) | dropped | – |
 
 One change per row. CV = mean OOF macro AUC vs pseudo-labels (site-grouped 5-fold). Gold = macro AUC vs gold test 29 (looked at rarely).
 

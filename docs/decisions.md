@@ -117,6 +117,8 @@ Each entry: the choice, why, the evidence, and what would change it.
 
 ## D25. Self-training round 2, and no longer training
 - **Round 2:** label = 0.3 × LLM + 0.7 × mean out-of-fold prediction of the v1 and v2 round-1 students (two teachers, so the target leans on images more). Same folds 0–1 on v2: gold test half 0.898 → 0.905, all 58 0.913 → 0.921; both folds improved on their own. Folds 2–4 queued.
+- **5 folds:** gold 0.922 (test half 0.904) vs round 1 0.919 (0.900).
+- **ResNet-50 is dropped:** on round-2 labels it no longer adds diversity (prediction rank correlation with B0 0.92, was 0.86 in round 1; both students learn the same teacher). B0 + ResNet-50 on fold 0 scored 0.917 on gold, below B0 alone (0.920).
 - **24 epochs:** fold 0, same labels: gold 0.915 → 0.917, test half flat (0.897 → 0.896). Not worth twice the GPU time; stay at 12.
 - **Caveat (from a public write-up):** one team found mixed labels made fold models more alike and their 5-fold ensemble lost 0.001 on the LB. Our round 1 gained +0.005 on the LB, so we judge round 2 on the LB too.
 
