@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pandas as pd
 import torch
@@ -37,30 +38,46 @@ def fold_checkpoints(models_dir: Path) -> list[dict]:
     return found
 
 
+def derivable(small: str, large: str) -> bool:
+    """small is large at a lower resolution: same physical crop and the same slices."""
+    a, b = PREPROCESS[small], PREPROCESS[large]
+    return a["image_size"] < b["image_size"] and all(a[k] == b[k] for k in ("n_slices", "crop_mm", "slice_range"))
+
+
+def downsize(src: Path, dst: Path, size: int) -> None:
+    """Write src's arrays at a smaller size, so a second resolution needs no second pass over the DICOMs."""
+    dst.mkdir(parents=True, exist_ok=True)
+    for f in sorted(src.glob("*.npz")):
+        with np.load(f) as data:
+            image, present = data["image"], data["present"]
+        small = np.stack([[cv2.resize(s, (size, size), interpolation=cv2.INTER_AREA) for s in view] for view in image])
+        np.savez(dst / f.name, image=small, present=present)
+
+
 @torch.no_grad()
 def predict(processed: Path, uids: list[str], checkpoints: list[dict], batch_size: int = 4,
             workers: int = 2, flip_tta: bool = True) -> pd.DataFrame:
     """Mean sigmoid probability over fold models (and a left-right flip of every view), one row per study."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
     loader = DataLoader(StudyDataset(uids, processed), batch_size=batch_size, num_workers=workers)
-    total = np.zeros((len(uids), len(LABELS)))
+    models = []  # all fold models stay loaded, so each study is read and decompressed once, not once per model
     for ck in checkpoints:
         model = KneeNet(n_slots=len(SLOTS), n_slices=ck["n_slices"], backbone=ck["backbone"], pretrained=False,
                         fusion=ck["fusion"])
         model.load_state_dict(torch.load(ck["path"], map_location="cpu"))
-        model.to(device).eval()
-        rows = []
-        for image, present, _, _ in loader:
-            image = image.to(device).float() / 255
-            present = present.to(device)
-            with torch.autocast(device_type=device, dtype=torch.float16, enabled=device == "cuda"):
-                prob = model(image, present).float().sigmoid()
+        models.append(model.to(device).eval())
+    rows = []
+    for image, present, _, _ in loader:
+        image = image.to(device).float() / 255
+        present = present.to(device)
+        prob = 0
+        with torch.autocast(device_type=device, dtype=torch.float16, enabled=device == "cuda"):
+            for model in models:
+                prob = prob + model(image, present).float().sigmoid()
                 if flip_tta:  # trained with left-right flips, so the mirrored study is an equally valid view
-                    prob = (prob + model(image.flip(-1), present).float().sigmoid()) / 2
-            rows.append(prob.cpu().numpy())
-        total += np.concatenate(rows)
-    return pd.DataFrame(total / len(checkpoints), columns=LABELS).assign(StudyInstanceUID=uids)
-
+                    prob = prob + model(image.flip(-1), present).float().sigmoid()
+        rows.append((prob / (len(models) * (2 if flip_tta else 1))).cpu().numpy())
+    return pd.DataFrame(np.concatenate(rows), columns=LABELS).assign(StudyInstanceUID=uids)
 
 def main() -> None:
     p = argparse.ArgumentParser()
@@ -76,20 +93,28 @@ def main() -> None:
     print(f"{len(checkpoints)} fold models: {[str(c['path']) for c in checkpoints]}", flush=True)
     n_series_studies = pd.read_csv(args.comp_dir / "test_series.csv")["StudyInstanceUID"].nunique()
 
+    # Prepare each preprocessing version once, largest first; a smaller one with the same crop and slices
+    # is resized from the larger arrays instead of decoding every DICOM again.
     prepared: dict[str, Path] = {}
-    family_predictions = []
-    for family in sorted({c["family"] for c in checkpoints}):
-        group = [c for c in checkpoints if c["family"] == family]
-        version = group[0]["version"]
-        if version not in prepared:  # prepare the test set once per preprocessing version
-            work = args.work / version
+    for version in sorted({c["version"] for c in checkpoints}, key=lambda v: -PREPROCESS[v]["image_size"]):
+        work = args.work / version
+        source = next((v for v in prepared if derivable(version, v)), None)
+        if source:
+            downsize(prepared[source], work, PREPROCESS[version]["image_size"])
+            print(f"{version}: resized from {source}", flush=True)
+        else:
             errors = preprocess_all(args.comp_dir / "test_series.csv", args.comp_dir / "test_series", work,
                                     workers=args.workers, version=version)
             for error in errors:
                 print(error, flush=True)
             if len(errors) > 0.05 * max(n_series_studies, 1):  # a broken decoder must fail the run, not hide in averages
                 raise RuntimeError(f"{len(errors)} of {n_series_studies} test studies failed preprocessing ({version})")
-            prepared[version] = work
+        prepared[version] = work
+
+    family_predictions = []
+    for family in sorted({c["family"] for c in checkpoints}):
+        group = [c for c in checkpoints if c["family"] == family]
+        version = group[0]["version"]
         work = prepared[version]
         ready = [uid for uid in test["StudyInstanceUID"] if (work / f"{uid}.npz").exists()]
         family_predictions.append(predict(work, ready, group).set_index("StudyInstanceUID")[LABELS])
