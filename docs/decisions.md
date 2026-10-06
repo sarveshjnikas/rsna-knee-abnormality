@@ -130,4 +130,5 @@ Each entry: the choice, why, the evidence, and what would change it.
 
 ## D27. Per-finding attention pooling (fusion="label")
 - **Why:** a cruciate tear shows on two slices, osteoarthritis on many; one shared pooling makes them compete. Every (view, slice) is a token; each of the 12 findings has its own attention over all tokens and its own output. Used by the strongest public single models.
-- **Status:** implemented and tested; to be compared with the current fusion on the same fold and labels.
+- **Result (v3, round-2 labels, fold 0):** alone it ties the shared pooling (gold 0.919 vs 0.921, within noise), but its predictions differ more (rank correlation with v2 0.94 vs 0.97), so v2 + v3 per-finding averages best (0.924). It becomes the second model family.
+- **320 px alone did not help** (0.921 vs 0.920 at 256 px): resolution is not our bottleneck at B0 size.
