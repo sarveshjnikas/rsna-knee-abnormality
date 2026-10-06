@@ -18,6 +18,9 @@ Val = gold-58 macro AUC of the run's ensemble (models never train on the 58). LB
 | A2+ | D1 + A2 averaged 50/50 by family | 0.911 (dev 0.924 / test **0.896**) | ~0.935 *exp* (test +0.006) | – |
 | P2a | D1 + v2 students (folds 0–1), averaged by family | 0.914 (dev 0.927 / test 0.897) | **0.931** | **2,652** |
 | D1 | Self-training round 1 students (0.5 LLM + 0.5 out-of-fold), 5 folds, flip TTA at inference | 0.908 (dev 0.922 / test 0.890) | **0.929** | **2,686** |
+| P2 5f | v2 students (labels r1), 5 folds | 0.919 (dev 0.929 / test 0.900) | **0.934** | – |
+| R2 | Self-training round 2 (0.3 LLM + 0.7 mean of v1+v2 students' OOF), v2, folds 0–1 | 0.921 (dev 0.931 / test **0.905**) vs r1 same folds 0.913 (test 0.898) | – | – |
+| L24 | 24 epochs instead of 12 (v2, r1, fold 0) | 0.917 (dev 0.933 / test 0.896) vs 12 ep 0.915 (test 0.897) | – (not worth 2× time) | – |
 
 One change per row. CV = mean OOF macro AUC vs pseudo-labels (site-grouped 5-fold). Gold = macro AUC vs gold test 29 (looked at rarely).
 

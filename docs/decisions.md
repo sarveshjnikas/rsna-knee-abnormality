@@ -114,3 +114,18 @@ Each entry: the choice, why, the evidence, and what would change it.
 ## D24. Public label sets are not added
 - **Evidence:** alone, stevenleehans's v4 labels beat ours on the gold test half (0.879 vs 0.863). After the 50/50 mix with our out-of-fold image predictions, which is what students train on, there is no difference (0.906 vs 0.907).
 - **Meaning:** the image teacher already supplies what better report reading would add. Gains now come from better teachers (better data, more model families), not from more labellers. Also avoids depending on third-party label licences.
+
+## D25. Self-training round 2, and no longer training
+- **Round 2:** label = 0.3 × LLM + 0.7 × mean out-of-fold prediction of the v1 and v2 round-1 students (two teachers, so the target leans on images more). Same folds 0–1 on v2: gold test half 0.898 → 0.905, all 58 0.913 → 0.921; both folds improved on their own. Folds 2–4 queued.
+- **24 epochs:** fold 0, same labels: gold 0.915 → 0.917, test half flat (0.897 → 0.896). Not worth twice the GPU time; stay at 12.
+- **Caveat (from a public write-up):** one team found mixed labels made fold models more alike and their 5-fold ensemble lost 0.001 on the LB. Our round 1 gained +0.005 on the LB, so we judge round 2 on the LB too.
+
+## D26. Add our models to the public community stack as one fixed-weight leg
+- **Why:** the bronze line (0.943) is one public notebook: a blend of ~30 public checkpoints (DINOv2, RadImageNet heads, CoAtNet at 336–384 px) that most of the 0.938–0.943 teams fork. An independently trained 0.929 model added at 15–30% scored 0.944 (three runs); 45% scored 0.942. Ours scores 0.934 alone.
+- **How:** separate notebook (`kaggle/blend/build.py`): stack cells unchanged, then our 5 v2 models in a subprocess with our own decoders, rank-blended at a fixed 0.30 chosen before submitting. If our leg fails, the stack's submission is kept.
+- **Risks:** the stack's constants were tuned on the public LB and the gold 58, so it may drop on private; our independent leg is the hedge. Runtime: the stack takes 6.5–8 h of 9.
+- Our own pipeline stays separate and is still scored on its own.
+
+## D27. Per-finding attention pooling (fusion="label")
+- **Why:** a cruciate tear shows on two slices, osteoarthritis on many; one shared pooling makes them compete. Every (view, slice) is a token; each of the 12 findings has its own attention over all tokens and its own output. Used by the strongest public single models.
+- **Status:** implemented and tested; to be compared with the current fusion on the same fold and labels.
