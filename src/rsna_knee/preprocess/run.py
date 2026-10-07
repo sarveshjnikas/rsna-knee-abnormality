@@ -24,8 +24,7 @@ def _process(args: tuple[str, pd.DataFrame, Path, Path, str]) -> str | None:
     if target.exists():
         return None
     try:
-        image, present = build_study(series, image_root / uid, version)
-        np.savez_compressed(target, image=image, present=present)
+        np.savez_compressed(target, **build_study(series, image_root / uid, version))
         return None
     except Exception:  # one bad study must not stop the run; it is reported at the end
         return f"{uid}: {traceback.format_exc(limit=2)}"

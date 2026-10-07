@@ -19,7 +19,7 @@ import torch
 from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 
-from rsna_knee.config import LABEL_DIR, LABELS, RAW, SLOTS, SPLITS
+from rsna_knee.config import LABEL_DIR, LABELS, RAW, SPLITS
 from rsna_knee.model.data import StudyDataset, augment
 from rsna_knee.model.network import KneeNet
 
@@ -63,6 +63,7 @@ def main() -> None:
     p.add_argument("--limit", type=int, default=0, help="debug: use only this many training studies")
     p.add_argument("--grad-checkpointing", action="store_true", help="trade compute for GPU memory")
     p.add_argument("--unique-slices", action="store_true", help="blank out repeated slices instead of feeding them twice")
+    p.add_argument("--slots", type=int, default=0, help="use only the first N views of the data (0: all)")
     args = p.parse_args()
 
     torch.manual_seed(args.seed)
@@ -85,16 +86,17 @@ def main() -> None:
         train_uids, val_uids = train_uids[: args.limit], val_uids[: max(args.limit // 4, 2)]
 
     loader_args = dict(batch_size=args.batch_size, num_workers=args.workers, pin_memory=device == "cuda")
-    data = dict(processed_dir=args.processed, unique=args.unique_slices)
+    data = dict(processed_dir=args.processed, unique=args.unique_slices, n_slots=args.slots)
     train_loader = DataLoader(StudyDataset(train_uids, labels=labels, **data), shuffle=True, drop_last=True, **loader_args)
     val_loader = DataLoader(StudyDataset(val_uids, labels=labels, **data), **loader_args)
     gold_loader = DataLoader(StudyDataset(gold_uids, **data), **loader_args)
 
     with np.load(args.processed / f"{train_uids[0]}.npz") as sample:
-        n_slices = sample["image"].shape[1]  # the data, not a constant, decides the slice count
-    config = json.loads((out / "config.json").read_text()) | {"n_slices": str(n_slices)}
+        n_views, n_slices = sample["image"].shape[:2]  # the data, not a constant, decides the shape
+    n_slots = args.slots or n_views
+    config = json.loads((out / "config.json").read_text()) | {"n_slices": str(n_slices), "n_slots": str(n_slots)}
     (out / "config.json").write_text(json.dumps(config, indent=2))
-    model = KneeNet(n_slots=len(SLOTS), n_slices=n_slices, backbone=args.backbone, fusion=args.fusion).to(device)
+    model = KneeNet(n_slots=n_slots, n_slices=n_slices, backbone=args.backbone, fusion=args.fusion).to(device)
     if args.grad_checkpointing:
         model.encoder.set_grad_checkpointing(True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)

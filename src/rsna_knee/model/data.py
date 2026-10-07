@@ -32,11 +32,13 @@ class StudyDataset(Dataset):
     With unique=True, repeated slices become blanks and present marks real slices per view (S, N).
     """
 
-    def __init__(self, uids: list[str], processed_dir: Path, labels: pd.DataFrame | None = None, unique: bool = False):
+    def __init__(self, uids: list[str], processed_dir: Path, labels: pd.DataFrame | None = None, unique: bool = False,
+                 n_slots: int = 0):
         self.uids = list(uids)
         self.processed_dir = Path(processed_dir)
         self.targets = labels.set_index("StudyInstanceUID")[LABELS] if labels is not None else None
         self.unique = unique
+        self.n_slots = n_slots  # 0: every view in the data; 4 on 5-view data reproduces the 4-view setup
 
     def __len__(self) -> int:
         return len(self.uids)
@@ -45,8 +47,13 @@ class StudyDataset(Dataset):
         uid = self.uids[i]
         with np.load(self.processed_dir / f"{uid}.npz") as data:
             image, present = data["image"], data["present"]
-        if self.unique:
+            valid = data["valid"] if "valid" in data else None  # v4+: real slices per view, no repeats
+        if valid is not None:
+            present = valid & present[:, None]
+        elif self.unique:
             image, present = unique_slices(image, present)
+        if self.n_slots:
+            image, present = image[: self.n_slots], present[: self.n_slots]
         image, present = torch.from_numpy(image), torch.from_numpy(present)
         if self.targets is not None:
             target = torch.tensor(self.targets.loc[uid].to_numpy(dtype=np.float32))

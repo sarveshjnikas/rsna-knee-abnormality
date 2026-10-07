@@ -11,23 +11,45 @@ from rsna_knee.config import IMAGE_SIZE, N_SLICES
 INTENSITY_PERCENTILES = (1.0, 99.5)
 
 
-def sorted_slice_paths(series_dir: Path) -> list[Path]:
-    """Slice files ordered by physical position along the slice normal (file names are random)."""
+def sorted_slices(series_dir: Path) -> tuple[list[Path], np.ndarray | None]:
+    """Slice files ordered by physical position along the slice normal (file names are random), and
+    those positions in mm (None when the geometry tags are missing)."""
     paths = list(series_dir.glob("*.dcm"))
     headers = [pydicom.dcmread(p, stop_before_pixels=True) for p in paths]
     try:
         orientation = np.array(headers[0].ImageOrientationPatient, dtype=float)
         normal = np.cross(orientation[:3], orientation[3:])
         keys = [float(np.dot(normal, np.array(h.ImagePositionPatient, dtype=float))) for h in headers]
+        positions = np.array(keys)
     except AttributeError:  # missing geometry tags: fall back to the acquisition order
         keys = [int(getattr(h, "InstanceNumber", 0)) for h in headers]
-    return [paths[i] for i in np.argsort(keys, kind="stable")]
+        positions = None
+    order = np.argsort(keys, kind="stable")
+    return [paths[i] for i in order], (positions[order] if positions is not None else None)
+
+
+def sorted_slice_paths(series_dir: Path) -> list[Path]:
+    return sorted_slices(series_dir)[0]
 
 
 def pick_indices(n_total: int, n: int = N_SLICES, slice_range: tuple[float, float] = (0.0, 1.0)) -> np.ndarray:
     """n indices spread evenly over the chosen part of the stack (repeats when it is shorter than n)."""
     low, high = slice_range[0] * (n_total - 1), slice_range[1] * (n_total - 1)
     return np.linspace(low, high, n).round().astype(int)
+
+
+def pick_by_mm(positions: np.ndarray, n: int, slice_range: tuple[float, float], spacing_mm: float) -> np.ndarray:
+    """Slices about spacing_mm apart over the chosen part of the stack: at most n, never repeated.
+
+    The gap widens beyond spacing_mm only when n slices at that gap would not cover the range.
+    Stacks thicker than spacing_mm keep every slice in the range.
+    """
+    first, last = positions[0], positions[-1]
+    lo, hi = first + slice_range[0] * (last - first), first + slice_range[1] * (last - first)
+    step = max(spacing_mm, (hi - lo) / max(n - 1, 1))
+    targets = np.arange(lo, hi + 1e-6, step)[:n] if step > 0 else np.array([lo])
+    nearest = np.abs(positions[None, :] - targets[:, None]).argmin(axis=1)
+    return np.unique(nearest)
 
 
 def to_square(image: np.ndarray, size: int = IMAGE_SIZE) -> np.ndarray:
@@ -86,13 +108,22 @@ def _frames(path: Path) -> np.ndarray:
 
 
 def load_volume(series_dir: Path, n_slices: int = N_SLICES, size: int = IMAGE_SIZE, crop_mm: float | None = None,
-                slice_range: tuple[float, float] = (0.0, 1.0)) -> np.ndarray:
-    paths = sorted_slice_paths(series_dir)
+                slice_range: tuple[float, float] = (0.0, 1.0), spacing_mm: float | None = None) -> np.ndarray:
+    """(n_slices, size, size) uint8; with spacing_mm, (k <= n_slices, size, size) with no repeated slice."""
+    paths, positions = sorted_slices(series_dir)
+
+    def pick(n_total: int) -> np.ndarray:
+        if not spacing_mm:
+            return pick_indices(n_total, n_slices, slice_range)
+        if positions is not None and len(positions) == n_total:
+            return pick_by_mm(positions, n_slices, slice_range, spacing_mm)
+        return np.unique(pick_indices(n_total, n_slices, slice_range))  # no geometry: by count, no repeats
+
     if len(paths) == 1:  # a single multi-frame file
         frames = _frames(paths[0])
-        slices = [frames[i] for i in pick_indices(len(frames), n_slices, slice_range)]
+        slices = [frames[i] for i in pick(len(frames))]
     else:
-        slices = [_frames(paths[i])[0] for i in pick_indices(len(paths), n_slices, slice_range)]
+        slices = [_frames(paths[i])[0] for i in pick(len(paths))]
     shape = slices[0].shape  # rare series mix slice sizes; bring them to the first one's
     slices = [s if s.shape == shape else cv2.resize(s, shape[::-1]) for s in slices]
     spacing = getattr(pydicom.dcmread(paths[0], stop_before_pixels=True), "PixelSpacing", None)

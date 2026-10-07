@@ -35,6 +35,7 @@ def fold_checkpoints(models_dir: Path) -> list[dict]:
             "version": version,
             "n_slices": int(config.get("n_slices", PREPROCESS[version]["n_slices"])),
             "unique_slices": str(config.get("unique_slices", False)) == "True",
+            "n_slots": int(config.get("n_slots", len(SLOTS))),
         })
     return found
 
@@ -60,13 +61,15 @@ def predict(processed: Path, uids: list[str], checkpoints: list[dict], batch_siz
             workers: int = 2, flip_tta: bool = True) -> pd.DataFrame:
     """Mean sigmoid probability over fold models (and a left-right flip of every view), one row per study."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    unique = {ck["unique_slices"] for ck in checkpoints}
-    if len(unique) != 1:
-        raise ValueError("one family must not mix slice modes")
-    loader = DataLoader(StudyDataset(uids, processed, unique=unique.pop()), batch_size=batch_size, num_workers=workers)
+    modes = {(ck["unique_slices"], ck["n_slots"]) for ck in checkpoints}
+    if len(modes) != 1:
+        raise ValueError("one family must not mix slice modes or view counts")
+    unique, n_slots = modes.pop()
+    loader = DataLoader(StudyDataset(uids, processed, unique=unique, n_slots=n_slots), batch_size=batch_size,
+                        num_workers=workers)
     models = []  # all fold models stay loaded, so each study is read and decompressed once, not once per model
     for ck in checkpoints:
-        model = KneeNet(n_slots=len(SLOTS), n_slices=ck["n_slices"], backbone=ck["backbone"], pretrained=False,
+        model = KneeNet(n_slots=ck["n_slots"], n_slices=ck["n_slices"], backbone=ck["backbone"], pretrained=False,
                         fusion=ck["fusion"])
         model.load_state_dict(torch.load(ck["path"], map_location="cpu"))
         models.append(model.to(device).eval())

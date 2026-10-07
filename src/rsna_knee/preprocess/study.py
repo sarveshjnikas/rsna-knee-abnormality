@@ -18,24 +18,29 @@ def slot_of(plane: str, fluid_sensitive: int) -> str:
     return f"{plane[:3].lower()}_{'FS' if fluid_sensitive == 1 else 'noFS'}"
 
 
-def choose_series(series: pd.DataFrame, study_dir: Path) -> dict[str, str]:
+def choose_series(series: pd.DataFrame, study_dir: Path, slots: tuple[str, ...] = SLOTS) -> dict[str, str]:
     """{slot: SeriesInstanceUID}. Duplicates: keep the series with the most slices (best coverage)."""
     series = series.assign(
         slot=[slot_of(p, f) for p, f in zip(series["Anatomical_Plane"], series["Fluid_Sensitive"])],
         n_files=[len(list((study_dir / uid).glob("*.dcm"))) for uid in series["SeriesInstanceUID"]],
     )
-    series = series[series["slot"].isin(SLOTS) & (series["n_files"] > 0)]
+    series = series[series["slot"].isin(slots) & (series["n_files"] > 0)]
     best = series.sort_values(["n_files", "SeriesInstanceUID"], ascending=[False, True]).drop_duplicates("slot")
     return dict(zip(best["slot"], best["SeriesInstanceUID"]))
 
 
-def build_study(series: pd.DataFrame, study_dir: Path, version: str = "v1") -> tuple[np.ndarray, np.ndarray]:
-    """image: (len(SLOTS), n_slices, image_size, image_size) uint8; present: (len(SLOTS),) bool."""
+def build_study(series: pd.DataFrame, study_dir: Path, version: str = "v1") -> dict[str, np.ndarray]:
+    """image: (slots, n_slices, image_size, image_size) uint8; present: (slots,) bool; for versions that
+    space slices by mm also valid: (slots, n_slices) bool, real slices first and blanks after."""
     cfg = PREPROCESS[version]
-    image = np.zeros((len(SLOTS), cfg["n_slices"], cfg["image_size"], cfg["image_size"]), dtype=np.uint8)
-    present = np.zeros(len(SLOTS), dtype=bool)
-    for slot, series_uid in choose_series(series, study_dir).items():
-        i = SLOTS.index(slot)
-        image[i] = load_volume(study_dir / series_uid, cfg["n_slices"], cfg["image_size"], cfg["crop_mm"], cfg["slice_range"])
-        present[i] = True
-    return image, present
+    slots = cfg.get("slots", SLOTS)
+    image = np.zeros((len(slots), cfg["n_slices"], cfg["image_size"], cfg["image_size"]), dtype=np.uint8)
+    present = np.zeros(len(slots), dtype=bool)
+    valid = np.zeros((len(slots), cfg["n_slices"]), dtype=bool)
+    for slot, series_uid in choose_series(series, study_dir, slots).items():
+        i = slots.index(slot)
+        volume = load_volume(study_dir / series_uid, cfg["n_slices"], cfg["image_size"], cfg["crop_mm"],
+                             cfg["slice_range"], cfg.get("spacing_mm"))
+        image[i, : len(volume)], valid[i, : len(volume)], present[i] = volume, True, True
+    out = {"image": image, "present": present}
+    return out | ({"valid": valid} if cfg.get("spacing_mm") else {})

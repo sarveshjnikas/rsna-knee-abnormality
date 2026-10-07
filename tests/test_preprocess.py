@@ -49,3 +49,35 @@ def test_choose_series_keeps_longest_duplicate(tmp_path):
     })
     chosen = choose_series(series, tmp_path)
     assert chosen == {"sag_FS": "s_long", "cor_FS": "c"} and set(chosen) <= set(SLOTS)
+
+
+def test_pick_by_mm_never_repeats_and_respects_spacing():
+    import numpy as np
+
+    from rsna_knee.preprocess.volume import pick_by_mm
+
+    thick = np.arange(30) * 4.0  # 4 mm slices: every slice in the central range, none repeated
+    idx = pick_by_mm(thick, 32, (0.06, 0.94), 3.0)
+    assert len(idx) == len(set(idx)) and idx.tolist() == list(range(2, 28))
+    thin = np.arange(200) * 0.5  # 0.5 mm slices over 100 mm: about 3 mm apart, at most 32
+    idx = pick_by_mm(thin, 32, (0.06, 0.94), 3.0)
+    gaps = np.diff(thin[idx])
+    assert len(idx) <= 32 and gaps.min() >= 2.9 and len(set(idx)) == len(idx)
+    long = np.arange(400) * 0.5  # 200 mm: 32 slices cannot cover it at 3 mm, so the gap widens
+    assert len(pick_by_mm(long, 32, (0.06, 0.94), 3.0)) == 32
+
+
+def test_dataset_reads_slice_mask_and_view_count(tmp_path):
+    import numpy as np
+
+    from rsna_knee.model.data import StudyDataset
+
+    image = np.random.randint(1, 256, (5, 6, 8, 8), dtype=np.uint8)
+    valid = np.zeros((5, 6), dtype=bool)
+    valid[:, :4] = True
+    present = np.array([True, True, False, True, True])
+    np.savez(tmp_path / "s.npz", image=image, present=present, valid=valid)
+    img, mask, _, _ = StudyDataset(["s"], tmp_path)[0]
+    assert img.shape == (5, 6, 8, 8) and mask.shape == (5, 6) and not mask[2].any() and mask[0].sum() == 4
+    img, mask, _, _ = StudyDataset(["s"], tmp_path, n_slots=4)[0]
+    assert img.shape == (4, 6, 8, 8) and mask.shape == (4, 6)
