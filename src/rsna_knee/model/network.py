@@ -18,10 +18,18 @@ from torch import nn
 from rsna_knee.config import LABELS
 
 
-def neighbour_channels(volume: torch.Tensor) -> torch.Tensor:
-    """(B, S, N, H, W) -> (B, S, N, 3, H, W): slices i-1, i, i+1 (edges repeated)."""
+def neighbour_channels(volume: torch.Tensor, valid: torch.Tensor | None = None) -> torch.Tensor:
+    """(B, S, N, H, W) -> (B, S, N, 3, H, W): slices i-1, i, i+1 (edges repeated).
+
+    valid (B, S, N) marks real slices; a blank neighbour is replaced by the slice itself.
+    """
     prev = torch.cat([volume[:, :, :1], volume[:, :, :-1]], dim=2)
     nxt = torch.cat([volume[:, :, 1:], volume[:, :, -1:]], dim=2)
+    if valid is not None:
+        edge = torch.zeros_like(valid[:, :, :1])
+        prev_ok = torch.cat([edge, valid[:, :, :-1]], dim=2)[..., None, None]
+        next_ok = torch.cat([valid[:, :, 1:], edge], dim=2)[..., None, None]
+        prev, nxt = torch.where(prev_ok, prev, volume), torch.where(next_ok, nxt, volume)
     return torch.stack([prev, volume, nxt], dim=3)
 
 
@@ -32,8 +40,8 @@ class AttentionPool(nn.Module):
         super().__init__()
         self.score = nn.Sequential(nn.Linear(dim, dim // 4), nn.Tanh(), nn.Linear(dim // 4, 1))
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # (B, N, D) -> (B, D)
-        weights = self.score(x).softmax(dim=1)
+    def forward(self, x: torch.Tensor, valid: torch.Tensor) -> torch.Tensor:  # (B, N, D), (B, N) -> (B, D)
+        weights = self.score(x).masked_fill(~valid.unsqueeze(-1), float("-inf")).softmax(dim=1)
         return (weights * x).sum(dim=1)
 
 
@@ -71,19 +79,25 @@ class KneeNet(nn.Module):
         self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
 
     def forward(self, image: torch.Tensor, present: torch.Tensor) -> torch.Tensor:
-        """image: (B, S, N, H, W) float in [0, 1]; present: (B, S) bool -> logits (B, n_labels)."""
+        """image: (B, S, N, H, W) float in [0, 1]; present: (B, S) views, or (B, S, N) real slices
+        per view (blank slices ignored) -> logits (B, n_labels)."""
         b, s, n, h, w = image.shape
-        x = neighbour_channels(image).reshape(b * s * n, 3, h, w)
+        slices = present if present.dim() == 3 else None
+        present = present.any(dim=-1) if slices is not None else present
+        valid = slices if slices is not None else present.unsqueeze(-1).expand(b, s, n)
+        x = neighbour_channels(image, slices).reshape(b * s * n, 3, h, w)
         x = self.encoder((x - self.mean) / self.std).reshape(b, s, n, -1)
         weights = present.unsqueeze(-1).float()
+        pool_valid = valid | ~present.unsqueeze(-1)  # a missing view pools its blanks; it is masked out later
         if self.fusion_kind == "mean":  # simple baseline: average slices, then average present views
-            fused = (x.mean(dim=2) * weights).sum(dim=1) / weights.sum(dim=1).clamp(min=1)
+            per_view = (x * pool_valid[..., None]).sum(dim=2) / pool_valid.sum(dim=2, keepdim=True)
+            fused = (per_view * weights).sum(dim=1) / weights.sum(dim=1).clamp(min=1)
             return self.head(fused)
         x = x + self.slice_position
-        if self.fusion_kind == "label":  # every (view, slice) is a token; missing views are masked out
+        if self.fusion_kind == "label":  # every real (view, slice) is a token; blanks and missing views masked
             tokens = (x + self.slot_type.unsqueeze(2)).reshape(b, s * n, -1)
-            return self.label_attention(tokens, present.repeat_interleave(n, dim=1))
-        slots = torch.stack([pool(x[:, i]) for i, pool in enumerate(self.pools)], dim=1) + self.slot_type
+            return self.label_attention(tokens, valid.reshape(b, s * n))
+        slots = torch.stack([pool(x[:, i], pool_valid[:, i]) for i, pool in enumerate(self.pools)], dim=1) + self.slot_type
         slots = self.fusion(slots, src_key_padding_mask=~present)
         fused = (slots * weights).sum(dim=1) / weights.sum(dim=1).clamp(min=1)
         return self.head(fused)

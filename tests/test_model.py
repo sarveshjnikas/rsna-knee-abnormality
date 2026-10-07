@@ -65,3 +65,46 @@ def test_distilled_labels_blend_and_reject_duplicates():
     assert (out[LABELS] == 0.5).all().all()
     with pytest.raises(ValueError):
         distilled_labels(report, pd.concat([oof, oof]), alpha=0.5)
+
+
+def test_unique_slices_drops_repeats_and_keeps_order():
+    import numpy as np
+
+    from rsna_knee.model.data import unique_slices
+
+    real = np.random.randint(1, 256, (3, 8, 8), dtype=np.uint8)
+    image = np.zeros((2, 5, 8, 8), dtype=np.uint8)
+    image[0] = real[[0, 0, 1, 2, 2]]  # a short series stretched to 5 positions
+    out, valid = unique_slices(image, np.array([True, False]))
+    assert valid.tolist() == [[True, True, True, False, False], [False] * 5]
+    assert np.array_equal(out[0, :3], real) and not out[0, 3:].any()
+
+
+@pytest.mark.parametrize("fusion", ["attention", "mean", "label"])
+def test_blank_slices_are_ignored(fusion):
+    torch.manual_seed(0)
+    model = KneeNet(n_slots=S, n_slices=N, backbone="resnet18", pretrained=False, fusion=fusion).eval()
+    image = torch.rand(1, S, N, H, H)
+    present = torch.ones(1, S, N, dtype=torch.bool)
+    present[0, 0, 4:] = False  # view 0 has 4 real slices
+    present[0, 3] = False  # view 3 is missing
+    other = image.clone()
+    other[0, 0, 4:] = torch.rand(N - 4, H, H)
+    other[0, 3] = torch.rand(N, H, H)
+    with torch.no_grad():
+        assert torch.allclose(model(image, present), model(other, present), atol=1e-5)
+
+
+def test_full_slice_mask_matches_view_mask():
+    model, image = _model(), torch.rand(1, S, N, H, H)
+    views = torch.tensor([[True, True, False, True]])
+    with torch.no_grad():
+        assert torch.allclose(model(image, views), model(image, views[..., None].expand(1, S, N)), atol=1e-5)
+
+
+def test_view_dropout_with_slice_mask_keeps_a_view():
+    image, present = torch.rand(B, S, N, H, H), torch.ones(B, S, N, dtype=torch.bool)
+    present[:, :, -2:] = False
+    _, kept = augment(image, present, view_dropout=1.0)
+    assert kept.shape == present.shape and (kept.any(dim=-1).sum(dim=1) >= 1).all()
+    assert not kept[:, :, -2:].any()  # blanks stay blank

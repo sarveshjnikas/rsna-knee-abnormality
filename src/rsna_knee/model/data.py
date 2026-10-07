@@ -11,13 +11,32 @@ from torch.utils.data import Dataset
 from rsna_knee.config import LABELS
 
 
-class StudyDataset(Dataset):
-    """Items: (image uint8 (S, N, H, W), present bool (S,), target float (12,), uid)."""
+def unique_slices(image: np.ndarray, present: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Drop the repeats that slice picking adds to short series; real slices first, blanks after.
 
-    def __init__(self, uids: list[str], processed_dir: Path, labels: pd.DataFrame | None = None):
+    image (S, N, H, W), present (S,) -> image with each view's distinct slices moved to the front and
+    zeros after them, and valid (S, N): which positions hold a real slice. A repeat is a bit-for-bit
+    copy of the slice before it, because both came from the same DICOM slice.
+    """
+    out, valid = np.zeros_like(image), np.zeros(image.shape[:2], dtype=bool)
+    for s in np.flatnonzero(present):
+        new = np.ones(image.shape[1], dtype=bool)
+        new[1:] = (image[s, 1:] != image[s, :-1]).reshape(image.shape[1] - 1, -1).any(axis=1)
+        out[s, : new.sum()], valid[s, : new.sum()] = image[s, new], True
+    return out, valid
+
+
+class StudyDataset(Dataset):
+    """Items: (image uint8 (S, N, H, W), present bool (S,) or (S, N), target float (12,), uid).
+
+    With unique=True, repeated slices become blanks and present marks real slices per view (S, N).
+    """
+
+    def __init__(self, uids: list[str], processed_dir: Path, labels: pd.DataFrame | None = None, unique: bool = False):
         self.uids = list(uids)
         self.processed_dir = Path(processed_dir)
         self.targets = labels.set_index("StudyInstanceUID")[LABELS] if labels is not None else None
+        self.unique = unique
 
     def __len__(self) -> int:
         return len(self.uids)
@@ -25,7 +44,10 @@ class StudyDataset(Dataset):
     def __getitem__(self, i: int):
         uid = self.uids[i]
         with np.load(self.processed_dir / f"{uid}.npz") as data:
-            image, present = torch.from_numpy(data["image"]), torch.from_numpy(data["present"])
+            image, present = data["image"], data["present"]
+        if self.unique:
+            image, present = unique_slices(image, present)
+        image, present = torch.from_numpy(image), torch.from_numpy(present)
         if self.targets is not None:
             target = torch.tensor(self.targets.loc[uid].to_numpy(dtype=np.float32))
         else:
@@ -35,7 +57,8 @@ class StudyDataset(Dataset):
 
 def augment(image: torch.Tensor, present: torch.Tensor, view_dropout: float = 0.15,
             min_scale: float = 0.85) -> tuple[torch.Tensor, torch.Tensor]:
-    """image (B, S, N, H, W) float in [0, 1] on GPU; returns augmented image and present mask.
+    """image (B, S, N, H, W) float in [0, 1] on GPU; present (B, S) or per slice (B, S, N).
+    Returns the augmented image and present mask.
 
     - horizontal flip per view: a mirrored left knee looks like a right knee, and the
       labels are anatomical (medial stays medial), so flips preserve every label;
@@ -59,7 +82,9 @@ def augment(image: torch.Tensor, present: torch.Tensor, view_dropout: float = 0.
     offset = torch.empty(b, s, 1, 1, 1, device=image.device).uniform_(-0.05, 0.05)
     out = (out * gain + offset).clamp(0, 1)
 
-    drop = (torch.rand(b, s, device=image.device) < view_dropout) & present
-    keep_one = (present & ~drop).any(dim=1, keepdim=True)
-    present = torch.where(keep_one, present & ~drop, present)
+    views = present.any(dim=-1) if present.dim() == 3 else present
+    drop = (torch.rand(b, s, device=image.device) < view_dropout) & views
+    keep_one = (views & ~drop).any(dim=1, keepdim=True)
+    drop = drop & keep_one
+    present = present & ~(drop[..., None] if present.dim() == 3 else drop)
     return out, present

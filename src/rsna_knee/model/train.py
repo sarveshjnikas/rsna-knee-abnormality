@@ -62,6 +62,7 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--limit", type=int, default=0, help="debug: use only this many training studies")
     p.add_argument("--grad-checkpointing", action="store_true", help="trade compute for GPU memory")
+    p.add_argument("--unique-slices", action="store_true", help="blank out repeated slices instead of feeding them twice")
     args = p.parse_args()
 
     torch.manual_seed(args.seed)
@@ -84,9 +85,10 @@ def main() -> None:
         train_uids, val_uids = train_uids[: args.limit], val_uids[: max(args.limit // 4, 2)]
 
     loader_args = dict(batch_size=args.batch_size, num_workers=args.workers, pin_memory=device == "cuda")
-    train_loader = DataLoader(StudyDataset(train_uids, args.processed, labels), shuffle=True, drop_last=True, **loader_args)
-    val_loader = DataLoader(StudyDataset(val_uids, args.processed, labels), **loader_args)
-    gold_loader = DataLoader(StudyDataset(gold_uids, args.processed), **loader_args)
+    data = dict(processed_dir=args.processed, unique=args.unique_slices)
+    train_loader = DataLoader(StudyDataset(train_uids, labels=labels, **data), shuffle=True, drop_last=True, **loader_args)
+    val_loader = DataLoader(StudyDataset(val_uids, labels=labels, **data), **loader_args)
+    gold_loader = DataLoader(StudyDataset(gold_uids, **data), **loader_args)
 
     with np.load(args.processed / f"{train_uids[0]}.npz") as sample:
         n_slices = sample["image"].shape[1]  # the data, not a constant, decides the slice count
