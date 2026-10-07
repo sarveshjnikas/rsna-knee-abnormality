@@ -81,3 +81,23 @@ def test_dataset_reads_slice_mask_and_view_count(tmp_path):
     assert img.shape == (5, 6, 8, 8) and mask.shape == (5, 6) and not mask[2].any() and mask[0].sum() == 4
     img, mask, _, _ = StudyDataset(["s"], tmp_path, n_slots=4)[0]
     assert img.shape == (4, 6, 8, 8) and mask.shape == (4, 6)
+
+
+def test_knee_side_tag_first_then_geometry():
+    from types import SimpleNamespace
+
+    from rsna_knee.preprocess.side import series_vote, study_side
+
+    def header(x, tag=None):  # coronal: rows along +x, columns along -z, 512 x 512 at 0.3 mm
+        h = SimpleNamespace(ImagePositionPatient=[x, 0, 0], ImageOrientationPatient=[1, 0, 0, 0, 0, -1],
+                            PixelSpacing=[0.3, 0.3], Rows=512, Columns=512)
+        if tag:
+            h.Laterality = tag
+        return h
+
+    assert series_vote(header(-200)) == (None, "R")  # centre at -123 mm: patient's right
+    assert series_vote(header(20)) == (None, "L")
+    assert series_vote(header(-76.8)) == (None, None)  # centre on the midline: undecided
+    assert study_side([series_vote(header(20, "R")), series_vote(header(20))]) == "R"  # the tag wins
+    assert study_side([(None, "L"), (None, "L"), (None, "R")]) == "L"
+    assert study_side([(None, None)]) is None

@@ -108,3 +108,38 @@ def test_view_dropout_with_slice_mask_keeps_a_view():
     _, kept = augment(image, present, view_dropout=1.0)
     assert kept.shape == present.shape and (kept.any(dim=-1).sum(dim=1) >= 1).all()
     assert not kept[:, :, -2:].any()  # blanks stay blank
+
+
+def test_masked_bce_ignores_unknown_targets():
+    from rsna_knee.model.train import masked_bce
+
+    logits = torch.tensor([[0.3, -1.0], [2.0, 0.5]])
+    full = torch.nn.functional.binary_cross_entropy_with_logits(logits, torch.tensor([[1.0, 0.0], [0.0, 1.0]]))
+    assert torch.allclose(masked_bce(logits, torch.tensor([[1.0, 0.0], [0.0, 1.0]])), full)
+    partial = masked_bce(logits, torch.tensor([[1.0, float("nan")], [float("nan"), 1.0]]))
+    expected = torch.nn.functional.binary_cross_entropy_with_logits(logits[[0, 1], [0, 1]], torch.tensor([1.0, 1.0]))
+    assert torch.allclose(partial, expected)
+
+
+def test_per_finding_report_weight():
+    import pandas as pd
+
+    from rsna_knee.config import LABELS
+    from rsna_knee.model.distill import distilled_labels
+
+    report = pd.DataFrame({"StudyInstanceUID": ["a"], **{l: [1.0] for l in LABELS}})
+    oof = pd.DataFrame({"StudyInstanceUID": ["a"], **{l: [0.0] for l in LABELS}})
+    out = distilled_labels(report, oof, alpha=0.5, alpha_by_label={"Effusion": 0.1}).set_index("StudyInstanceUID")
+    assert out.at["a", "Effusion"] == pytest.approx(0.1) and out.at["a", "ACL"] == pytest.approx(0.5)
+
+
+def test_mirror_right_knee():
+    import numpy as np
+
+    from rsna_knee.model.data import mirror_right_knee
+
+    image = np.arange(3 * 4 * 2 * 2, dtype=np.uint8).reshape(3, 4, 2, 2)
+    present = np.array([[True, True, True, False], [True] * 4, [True] * 4])
+    out = mirror_right_knee(image, present, ["sag", "cor", "axi"])
+    assert np.array_equal(out[0, :3], image[0, [2, 1, 0]]) and np.array_equal(out[0, 3], image[0, 3])
+    assert np.array_equal(out[1], image[1, :, :, ::-1]) and np.array_equal(out[2], image[2, :, :, ::-1])

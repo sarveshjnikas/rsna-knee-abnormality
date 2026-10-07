@@ -20,14 +20,20 @@ import pandas as pd
 from rsna_knee.config import LABEL_DIR, LABELS
 
 
-def distilled_labels(report_labels: pd.DataFrame, oof: pd.DataFrame, alpha: float) -> pd.DataFrame:
-    """alpha * report label + (1 - alpha) * OOF prediction, for every study that has an OOF prediction."""
+def distilled_labels(report_labels: pd.DataFrame, oof: pd.DataFrame, alpha: float,
+                     alpha_by_label: dict[str, float] | None = None) -> pd.DataFrame:
+    """alpha * report label + (1 - alpha) * OOF prediction, for every study that has an OOF prediction.
+    alpha_by_label overrides alpha for single findings (report weight per finding)."""
     report = report_labels.set_index("StudyInstanceUID")[LABELS]
     teacher = oof.set_index("StudyInstanceUID")[LABELS]
     if teacher.index.duplicated().any():
         raise ValueError("a study has more than one out-of-fold prediction")
+    unknown = set(alpha_by_label or {}) - set(LABELS)
+    if unknown:
+        raise ValueError(f"unknown findings: {unknown}")
+    weights = pd.Series({label: (alpha_by_label or {}).get(label, alpha) for label in LABELS})
     common = teacher.index.intersection(report.index)
-    blended = alpha * report.loc[common] + (1 - alpha) * teacher.loc[common]
+    blended = report.loc[common] * weights + teacher.loc[common] * (1 - weights)
     return blended.reset_index()
 
 
@@ -35,6 +41,7 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("runs", type=Path, nargs="+")
     p.add_argument("--alpha", type=float, default=0.5)
+    p.add_argument("--alpha-by-label", default="", help='per-finding report weight, e.g. "Effusion=0.1;Fracture=0.1"')
     p.add_argument("--labels", type=Path, default=LABEL_DIR / "labels_v2_gpt-6.1-sol.csv")
     p.add_argument("--out", type=Path, required=True)
     args = p.parse_args()
@@ -54,7 +61,8 @@ def main() -> None:
     if any(len(frame) != len(common) for frame in per_run):
         raise ValueError("teacher runs cover different studies; finish every fold first")
     oof = (sum(frame.loc[common] for frame in per_run) / len(per_run)).reset_index()
-    blended = distilled_labels(pd.read_csv(args.labels), oof, args.alpha)
+    by_label = dict((k, float(v)) for k, v in (item.split("=") for item in args.alpha_by_label.split(";") if item))
+    blended = distilled_labels(pd.read_csv(args.labels), oof, args.alpha, by_label)
     blended.to_csv(args.out, index=False)
     shift = (blended[LABELS] - pd.read_csv(args.labels).set_index("StudyInstanceUID").loc[blended["StudyInstanceUID"], LABELS].to_numpy()).abs()
     print(f"wrote {args.out}: {len(blended)} studies from {len(oof)} OOF predictions; mean |change| per label:")

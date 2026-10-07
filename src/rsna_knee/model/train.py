@@ -19,12 +19,23 @@ import torch
 from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 
-from rsna_knee.config import LABEL_DIR, LABELS, RAW, SPLITS
+from rsna_knee.config import LABEL_DIR, LABELS, PREPROCESS, RAW, SLOTS, SPLITS
 from rsna_knee.model.data import StudyDataset, augment
 from rsna_knee.model.network import KneeNet
 
 
-def macro_auc(targets: np.ndarray, scores: np.ndarray) -> float:
+def masked_bce(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """BCE over known targets only: a blank cell in the label file means "do not train this finding here"."""
+    known = ~torch.isnan(target)
+    loss = torch.nn.functional.binary_cross_entropy_with_logits(logits, target.nan_to_num(0.0), reduction="none")
+    return (loss * known).sum() / known.sum().clamp(min=1)
+
+
+def macro_auc(targets: np.ndarray, scores: np.ndarray, known: np.ndarray | None = None) -> float:
+    """Mean AUC over labels with both classes; known (same shape) excludes unknown targets per label."""
+    if known is not None:
+        aucs = [roc_auc_score(t[k], s[k]) for t, s, k in zip(targets.T, scores.T, known.T) if len(np.unique(t[k])) == 2]
+        return float(np.mean(aucs)) if aucs else float("nan")
     if len(targets) == 0:
         return float("nan")
     aucs = [roc_auc_score(t, s) for t, s in zip(targets.T, scores.T) if len(np.unique(t)) == 2]
@@ -64,6 +75,8 @@ def main() -> None:
     p.add_argument("--grad-checkpointing", action="store_true", help="trade compute for GPU memory")
     p.add_argument("--unique-slices", action="store_true", help="blank out repeated slices instead of feeding them twice")
     p.add_argument("--slots", type=int, default=0, help="use only the first N views of the data (0: all)")
+    p.add_argument("--canonical-side", type=Path, default=None,
+                   help="knee side table (StudyInstanceUID, side): mirror right knees and stop random left-right flips")
     args = p.parse_args()
 
     torch.manual_seed(args.seed)
@@ -87,6 +100,10 @@ def main() -> None:
 
     loader_args = dict(batch_size=args.batch_size, num_workers=args.workers, pin_memory=device == "cuda")
     data = dict(processed_dir=args.processed, unique=args.unique_slices, n_slots=args.slots)
+    if args.canonical_side:
+        side = pd.read_csv(args.canonical_side).dropna().set_index("StudyInstanceUID")["side"].to_dict()
+        slots = PREPROCESS[args.preprocess_version].get("slots", SLOTS)
+        data |= dict(sides=side, planes=[name[:3] for name in slots][: args.slots or len(slots)])
     train_loader = DataLoader(StudyDataset(train_uids, labels=labels, **data), shuffle=True, drop_last=True, **loader_args)
     val_loader = DataLoader(StudyDataset(val_uids, labels=labels, **data), **loader_args)
     gold_loader = DataLoader(StudyDataset(gold_uids, **data), **loader_args)
@@ -105,9 +122,10 @@ def main() -> None:
     schedule = torch.optim.lr_scheduler.LambdaLR(
         optimizer, lambda s: min(1.0, (s + 1) / warmup) * 0.5 * (1 + math.cos(math.pi * min(s / total_steps, 1.0)))
     )
-    loss_fn = torch.nn.BCEWithLogitsLoss()
+    loss_fn = masked_bce
 
-    val_targets = labels.set_index("StudyInstanceUID").loc[val_uids, LABELS].to_numpy() >= 0.5
+    val_raw = labels.set_index("StudyInstanceUID").loc[val_uids, LABELS].to_numpy()
+    val_known, val_targets = ~np.isnan(val_raw), np.nan_to_num(val_raw) >= 0.5
     gold_targets = gold.set_index("StudyInstanceUID").loc[gold_uids, LABELS].to_numpy()
     best, history = -1.0, []
     for epoch in range(args.epochs):
@@ -115,7 +133,7 @@ def main() -> None:
         start, losses = time.time(), []
         for image, present, target, _ in train_loader:
             image = image.to(device, non_blocking=True).float() / 255
-            image, present = augment(image, present.to(device))
+            image, present = augment(image, present.to(device), hflip=args.canonical_side is None)
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=device == "cuda"):
                 loss = loss_fn(model(image, present).float(), target.to(device))
             optimizer.zero_grad(set_to_none=True)
@@ -130,7 +148,7 @@ def main() -> None:
         row = {
             "epoch": epoch, "train_loss": float(np.mean(losses)), "seconds": round(time.time() - start),
             "gpu_peak_gb": round(torch.cuda.max_memory_allocated() / 1e9, 1) if device == "cuda" else None,
-            "val_auc": macro_auc(val_targets, val_scores), "gold_auc": macro_auc(gold_targets, gold_scores),
+            "val_auc": macro_auc(val_targets, val_scores, val_known), "gold_auc": macro_auc(gold_targets, gold_scores),
         }
         history.append(row)
         print(json.dumps(row), flush=True)

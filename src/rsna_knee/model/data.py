@@ -26,6 +26,19 @@ def unique_slices(image: np.ndarray, present: np.ndarray) -> tuple[np.ndarray, n
     return out, valid
 
 
+def mirror_right_knee(image: np.ndarray, present: np.ndarray, planes: list[str]) -> np.ndarray:
+    """Mirror a right knee into the left-knee layout: coronal and axial views left-right, sagittal views by
+    reversing the slice order (the real slices only, when blanks follow them)."""
+    out = image.copy()
+    for s, plane in enumerate(planes):
+        if plane == "sag":
+            k = int(present[s].sum()) if present.ndim == 2 else image.shape[1]
+            out[s, :k] = image[s, :k][::-1]
+        else:
+            out[s] = image[s, :, :, ::-1]
+    return out
+
+
 class StudyDataset(Dataset):
     """Items: (image uint8 (S, N, H, W), present bool (S,) or (S, N), target float (12,), uid).
 
@@ -33,12 +46,13 @@ class StudyDataset(Dataset):
     """
 
     def __init__(self, uids: list[str], processed_dir: Path, labels: pd.DataFrame | None = None, unique: bool = False,
-                 n_slots: int = 0):
+                 n_slots: int = 0, sides: dict[str, str] | None = None, planes: list[str] | None = None):
         self.uids = list(uids)
         self.processed_dir = Path(processed_dir)
         self.targets = labels.set_index("StudyInstanceUID")[LABELS] if labels is not None else None
         self.unique = unique
         self.n_slots = n_slots  # 0: every view in the data; 4 on 5-view data reproduces the 4-view setup
+        self.sides, self.planes = sides, planes  # with sides: right knees mirrored into the left-knee layout
 
     def __len__(self) -> int:
         return len(self.uids)
@@ -54,6 +68,8 @@ class StudyDataset(Dataset):
             image, present = unique_slices(image, present)
         if self.n_slots:
             image, present = image[: self.n_slots], present[: self.n_slots]
+        if self.sides is not None and self.sides.get(uid) == "R":
+            image = mirror_right_knee(image, present, self.planes)
         image, present = torch.from_numpy(image), torch.from_numpy(present)
         if self.targets is not None:
             target = torch.tensor(self.targets.loc[uid].to_numpy(dtype=np.float32))
@@ -63,7 +79,7 @@ class StudyDataset(Dataset):
 
 
 def augment(image: torch.Tensor, present: torch.Tensor, view_dropout: float = 0.15,
-            min_scale: float = 0.85) -> tuple[torch.Tensor, torch.Tensor]:
+            min_scale: float = 0.85, hflip: bool = True) -> tuple[torch.Tensor, torch.Tensor]:
     """image (B, S, N, H, W) float in [0, 1] on GPU; present (B, S) or per slice (B, S, N).
     Returns the augmented image and present mask.
 
@@ -74,7 +90,7 @@ def augment(image: torch.Tensor, present: torch.Tensor, view_dropout: float = 0.
       rely on any single view, which test studies may lack.
     """
     b, s, n, h, w = image.shape
-    flip = torch.rand(b, s, device=image.device) < 0.5
+    flip = torch.rand(b, s, device=image.device) < (0.5 if hflip else 0.0)  # off once knees share one layout
     image = torch.where(flip[:, :, None, None, None], image.flip(-1), image)
 
     out = torch.empty_like(image)

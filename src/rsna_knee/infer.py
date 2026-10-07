@@ -19,6 +19,7 @@ from rsna_knee.config import LABELS, PREPROCESS, SLOTS
 from rsna_knee.model.data import StudyDataset
 from rsna_knee.model.network import KneeNet
 from rsna_knee.preprocess.run import preprocess_all
+from rsna_knee.preprocess.side import side_table
 
 
 def fold_checkpoints(models_dir: Path) -> list[dict]:
@@ -36,6 +37,7 @@ def fold_checkpoints(models_dir: Path) -> list[dict]:
             "n_slices": int(config.get("n_slices", PREPROCESS[version]["n_slices"])),
             "unique_slices": str(config.get("unique_slices", False)) == "True",
             "n_slots": int(config.get("n_slots", len(SLOTS))),
+            "canonical_side": str(config.get("canonical_side", "None")) not in ("None", ""),
         })
     return found
 
@@ -58,15 +60,21 @@ def downsize(src: Path, dst: Path, size: int) -> None:
 
 @torch.no_grad()
 def predict(processed: Path, uids: list[str], checkpoints: list[dict], batch_size: int = 4,
-            workers: int = 2, flip_tta: bool = True) -> pd.DataFrame:
+            workers: int = 2, flip_tta: bool = True, sides: dict[str, str] | None = None) -> pd.DataFrame:
     """Mean sigmoid probability over fold models (and a left-right flip of every view), one row per study."""
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    modes = {(ck["unique_slices"], ck["n_slots"]) for ck in checkpoints}
+    modes = {(ck["unique_slices"], ck["n_slots"], ck["canonical_side"], ck["version"]) for ck in checkpoints}
     if len(modes) != 1:
-        raise ValueError("one family must not mix slice modes or view counts")
-    unique, n_slots = modes.pop()
-    loader = DataLoader(StudyDataset(uids, processed, unique=unique, n_slots=n_slots), batch_size=batch_size,
-                        num_workers=workers)
+        raise ValueError("one family must not mix slice modes, view counts or side handling")
+    unique, n_slots, canonical, version = modes.pop()
+    side_args = {}
+    if canonical:  # right knees mirrored like in training; no flip TTA (the model never saw flipped knees)
+        if sides is None:
+            raise ValueError("this family needs the test studies' knee sides")
+        side_args = dict(sides=sides, planes=[name[:3] for name in PREPROCESS[version].get("slots", SLOTS)][:n_slots])
+        flip_tta = False
+    loader = DataLoader(StudyDataset(uids, processed, unique=unique, n_slots=n_slots, **side_args),
+                        batch_size=batch_size, num_workers=workers)
     models = []  # all fold models stay loaded, so each study is read and decompressed once, not once per model
     for ck in checkpoints:
         model = KneeNet(n_slots=ck["n_slots"], n_slices=ck["n_slices"], backbone=ck["backbone"], pretrained=False,
@@ -118,13 +126,19 @@ def main() -> None:
                 raise RuntimeError(f"{len(errors)} of {n_series_studies} test studies failed preprocessing ({version})")
         prepared[version] = work
 
+    sides = None
+    if any(c["canonical_side"] for c in checkpoints):  # headers only: one file per test series
+        table = side_table(args.comp_dir / "test_series.csv", args.comp_dir / "test_series")
+        sides = table.dropna().set_index("StudyInstanceUID")["side"].to_dict()
+        print(f"knee sides: {table['side'].value_counts(dropna=False).to_dict()}", flush=True)
+
     family_predictions = []
     for family in sorted({c["family"] for c in checkpoints}):
         group = [c for c in checkpoints if c["family"] == family]
         version = group[0]["version"]
         work = prepared[version]
         ready = [uid for uid in test["StudyInstanceUID"] if (work / f"{uid}.npz").exists()]
-        family_predictions.append(predict(work, ready, group).set_index("StudyInstanceUID")[LABELS])
+        family_predictions.append(predict(work, ready, group, sides=sides).set_index("StudyInstanceUID")[LABELS])
         print(f"family {family}: {len(group)} models, preprocessing {version}", flush=True)
     # Average within a family (its folds), then give every family an equal vote.
     predictions = (sum(family_predictions) / len(family_predictions)).reset_index()
