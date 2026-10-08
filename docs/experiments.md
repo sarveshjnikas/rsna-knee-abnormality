@@ -30,6 +30,9 @@ Val = gold-58 macro AUC of the run's ensemble (models never train on the 58). LB
 | I3 | Idea 3: + 5th view, coronal non-fat-sat (v4, 5 views) | 0.915 (test 0.893) | 0.934 (-0.001 vs I2) | – |
 | R3 | Round 3, uniform mix 0.3 (R2 + v3 teachers), folds 0-1 | 0.917 (test 0.898) vs R2 0.921 (0.905) | – (stopped) | – |
 | X1 | ConvNeXt-Tiny lr 1e-4, 5 folds; B0 R2 + ConvNeXt (two families) | ConvNeXt 0.921 (test 0.904); pair 0.923 (test **0.907**) | **0.941** (+0.006 vs R2) | – |
+| X2 | Labels by finding type: report 0.5 tears/wear/synovitis, 0.1 effusion/Baker's/contusion/fracture (B0, 5 folds) | 0.923 (test 0.909) | 0.936 (+0.001) | – |
+| X3 | Standard knee side (right knees mirrored), no random flips (B0, 5 folds) | 0.922 (test 0.903) | 0.935 (±0) | – |
+| X4 | Synovitis trained only where the report mentions it (B0, 5 folds) | 0.922 (test 0.907); synovitis-effusion coupling 0.97 -> 0.95 | waits for reset | – |
 | A3 | ResNet-50 mean pooling on v2, round-2 labels, fold 0 | 0.905 (test 0.886) vs B0 0.920; B0+R50 0.917 < B0 alone; rank corr 0.92 (was 0.86) | dropped | – |
 
 One change per row. CV = mean OOF macro AUC vs pseudo-labels (site-grouped 5-fold). Gold = macro AUC vs gold test 29 (looked at rarely).

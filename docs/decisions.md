@@ -139,3 +139,8 @@ Each entry: the choice, why, the evidence, and what would change it.
 - **Second family (E2):** R2 + v3 per-finding 0.935 -> 0.939. **X1 (R2 + ConvNeXt-Tiny): 0.941**, our best own score. Averaging models that make different mistakes moved the score; next families: ConvNeXt (X1).
 - **Round 3 with one uniform mix stopped:** gold 0.921 -> 0.917 on folds 0-1. Next label work changes the mix per finding type (X2) instead.
 
+## D29. Targeted fixes for the weak findings did not move the score; the medal route is families + a strong public base
+- **X2-X4 (one change each, 5 folds):** labels by finding type 0.936, standard knee side 0.935, synovitis only where reported (gold 0.922). All within one leaderboard tick of R2 (0.935). On the targeted findings themselves the moves are noise-sized (gold +-0.01 on 9-27 positives; silver +-0.004) and the couplings we wanted to break barely changed (medial/lateral OA 0.88 -> 0.87, synovitis/effusion 0.97 -> 0.95). The four weak findings look limited by information, not by how we train.
+- **Field moved:** on Oct 8 the medal lines were bronze 0.946 and silver 0.950 (5,470 teams). The new public frontier is one CoAtNet at 384 px trained with external OAI data, scoring 0.949. External data and public models are allowed when public and free (rules, section 6).
+- **Plan:** (1) blend that public 0.949 model with our independent X1 (0.941, 10 models) at a fixed 0.30, base kept if our leg fails; (2) keep adding our own families (ConvNeXt at 320 px next), since families are the only lever that has moved our own score (+0.004, +0.006).
+
