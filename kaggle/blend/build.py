@@ -1,14 +1,18 @@
-"""Build the blend notebook: the public 0.943 community stack (unchanged) + our models as a 30% rank-blend leg.
+"""Build a blend notebook: a public base notebook (unchanged) + our models as a fixed-weight rank-blend leg.
 
     python kaggle/blend/build.py <public notebook .ipynb> <its kernel-metadata.json> <out dir>
+        [--all-cells] [--weight 0.30] [--models rsna-knee-models] [--slug rsna-knee-blend]
+
+--all-cells keeps every base cell (a base that ends by writing submission.csv); without it, only the
+community-stack cells of the original 0.943 notebook are kept.
 
 Part A (the stack) is copied cell for cell from the public notebook. Our leg runs afterwards in a
 subprocess with its own decoders and our rsna_knee code; if it fails for any reason, the stack's
 submission is kept, so a broken leg can never cost the submission.
 """
 
+import argparse
 import json
-import sys
 from pathlib import Path
 
 OWN_W = 0.30  # fixed before submitting: a 0.929 reader scored 0.944 at 15% and 30%, 0.942 at 45%
@@ -22,6 +26,10 @@ models by Mattia Angeli, Dread Development, Pilkwang Kim, prvsiyan, Sofia Anjenj
 
 Part B adds our own model family (2.5D EfficientNet-B0, 5 folds, self-trained labels; 0.934 alone)
 as a rank-blend leg at a fixed weight. If Part B fails, the stack's submission is kept."""
+
+def own_leg(weight: float, models: str) -> str:
+    return OWN_LEG.replace("OWN_W = 0.3", f"OWN_W = {weight}").replace("**/rsna-knee-models\"", f"**/{models}\"")
+
 
 OWN_LEG = f'''# Part B: our models, rank-blended into the stack's submission. Any failure keeps the stack's submission.
 import glob as _o_glob, os as _o_os, shutil as _o_shutil, subprocess as _o_sp, sys as _o_sys, time as _o_time
@@ -80,12 +88,27 @@ def cell(kind: str, source: str) -> dict:
 
 
 def main() -> None:
-    notebook_path, metadata_path, out = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+    p = argparse.ArgumentParser()
+    p.add_argument("notebook", type=Path)
+    p.add_argument("metadata", type=Path)
+    p.add_argument("out", type=Path)
+    p.add_argument("--all-cells", action="store_true")
+    p.add_argument("--weight", type=float, default=OWN_W)
+    p.add_argument("--models", default="rsna-knee-models")
+    p.add_argument("--slug", default="rsna-knee-blend")
+    args = p.parse_args()
+    notebook_path, metadata_path, out = args.notebook, args.metadata, args.out
     nb = json.loads(notebook_path.read_text())
     sources = ["".join(c["source"]) for c in nb["cells"]]
-    start = next(i for i, s in enumerate(sources) if s.startswith("# Set to False to skip the community stack"))
-    end = next(i for i, s in enumerate(sources) if "# Part B" in s)  # first cell of the public reader we replace
-    nb["cells"] = [cell("markdown", HEADER)] + nb["cells"][start:end] + [cell("markdown", "# Part B · Our models"), cell("code", OWN_LEG)]
+    if args.all_cells:
+        base = nb["cells"]
+        header = f"# RSNA Knee: public base notebook + our models\n\nBase notebook unchanged; our 2.5D models added as a rank-blend leg at {args.weight:.2f}. If our leg fails, the base submission is kept."
+    else:
+        start = next(i for i, s in enumerate(sources) if s.startswith("# Set to False to skip the community stack"))
+        end = next(i for i, s in enumerate(sources) if "# Part B" in s)  # first cell of the public reader we replace
+        base, header = nb["cells"][start:end], HEADER
+    leg = own_leg(args.weight, args.models)
+    nb["cells"] = [cell("markdown", header)] + base + [cell("markdown", "# Part B · Our models"), cell("code", leg)]
     for c in nb["cells"]:
         if c["cell_type"] == "code":
             c["outputs"], c["execution_count"] = [], None
@@ -94,12 +117,12 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     (out / "rsna-knee-blend.ipynb").write_text(json.dumps(nb, indent=1))
     datasets = [d for d in meta["dataset_sources"] if not d.startswith("goodpjw2008/")]
-    datasets += [f"{OWNER}/rsna-knee-code", f"{OWNER}/rsna-knee-wheels", f"{OWNER}/rsna-knee-models"]
+    datasets += [f"{OWNER}/rsna-knee-code", f"{OWNER}/rsna-knee-wheels", f"{OWNER}/{args.models}"]
     (out / "kernel-metadata.json").write_text(json.dumps({
-        "id": f"{OWNER}/rsna-knee-blend", "title": "rsna-knee-blend", "code_file": "rsna-knee-blend.ipynb",
+        "id": f"{OWNER}/{args.slug}", "title": args.slug, "code_file": "rsna-knee-blend.ipynb",
         "language": "python", "kernel_type": "notebook", "is_private": True, "enable_gpu": True,
         "enable_internet": False, "dataset_sources": datasets, "kernel_sources": meta["kernel_sources"],
-        "competition_sources": meta["competition_sources"], "model_sources": meta["model_sources"],
+        "competition_sources": meta["competition_sources"] or ["rsna-knee-abnormality-detection"], "model_sources": meta["model_sources"],
         "docker_image": meta["docker_image"], "machine_shape": meta["machine_shape"]}, indent=1))
     print(f"wrote {out}: {len(nb['cells'])} cells, {len(datasets)} datasets")
 
