@@ -135,6 +135,7 @@ Each entry: the choice, why, the evidence, and what would change it.
 
 ## D28. Slice handling is not a lever; families are
 - **Ideas 1-2 (one change each, leaderboard):** blank repeated slices 0.935 -> 0.936; slices ~3 mm apart 0.936 -> 0.935. Both inside leaderboard noise (one tick). They change how slices are fed, not what the model sees: 62% of series have fewer than 32 slices anyway, and mm spacing changes only thin-slice scans (~5%).
-- **Second family (E2):** R2 + v3 per-finding 0.935 -> 0.939. Averaging models that make different mistakes moved the score; next families: ConvNeXt (X1).
+- **Idea 3 (5th view, coronal non-fat-sat):** 0.935 -> 0.934, gold 0.922 -> 0.915. Not used.
+- **Second family (E2):** R2 + v3 per-finding 0.935 -> 0.939. **X1 (R2 + ConvNeXt-Tiny): 0.941**, our best own score. Averaging models that make different mistakes moved the score; next families: ConvNeXt (X1).
 - **Round 3 with one uniform mix stopped:** gold 0.921 -> 0.917 on folds 0-1. Next label work changes the mix per finding type (X2) instead.
 
