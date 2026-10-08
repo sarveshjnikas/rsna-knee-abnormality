@@ -143,3 +143,30 @@ def test_mirror_right_knee():
     out = mirror_right_knee(image, present, ["sag", "cor", "axi"])
     assert np.array_equal(out[0, :3], image[0, [2, 1, 0]]) and np.array_equal(out[0, 3], image[0, 3])
     assert np.array_equal(out[1], image[1, :, :, ::-1]) and np.array_equal(out[2], image[2, :, :, ::-1])
+
+
+def test_window_model_ignores_padding_and_mirror_is_an_involution():
+    import numpy as np
+
+    from rsna_knee.model.network import WindowNet
+    from rsna_knee.model.windows import mirror_windows, study_windows
+
+    views = [np.random.randint(0, 256, (k, 32, 32), dtype=np.uint8) for k in (4, 0, 3)]
+    win, ids, pos = study_windows(views)
+    assert win.shape == (7, 3, 32, 32) and ids.tolist() == [0] * 4 + [2] * 3 and pos[3] == 1.0
+    assert np.array_equal(win[0, 0], views[0][0]) and np.array_equal(win[1, 2], views[0][2])  # edge repeat, neighbour
+
+    torch.manual_seed(0)
+    model = WindowNet("resnet18", pretrained=False, n_views=3, chunk=4).eval()
+    w = torch.rand(1, 9, 3, 32, 32)
+    ids_t, pos_t = torch.tensor([[0, 0, 0, 0, 2, 2, 2, 0, 0]]), torch.rand(1, 9)
+    valid = torch.tensor([[True] * 7 + [False] * 2])
+    other = w.clone()
+    other[0, 7:] = torch.rand(2, 3, 32, 32)
+    with torch.no_grad():
+        assert model(w, ids_t, pos_t, valid).shape == (1, 12)
+        assert torch.allclose(model(w, ids_t, pos_t, valid), model(other, ids_t, pos_t, valid), atol=1e-5)
+    m, p = mirror_windows(w, ids_t, pos_t, sagittal=(0,))
+    m2, p2 = mirror_windows(m, ids_t, p, sagittal=(0,))
+    assert torch.equal(m2, w) and torch.allclose(p2, pos_t)
+    assert torch.equal(m[0, 0], w[0, 0].flip(0)) and torch.equal(m[0, 4], w[0, 4].flip(-1))
