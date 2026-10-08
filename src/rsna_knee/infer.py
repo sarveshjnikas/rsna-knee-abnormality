@@ -17,7 +17,8 @@ from torch.utils.data import DataLoader
 
 from rsna_knee.config import LABELS, PREPROCESS, SLOTS
 from rsna_knee.model.data import StudyDataset
-from rsna_knee.model.network import KneeNet
+from rsna_knee.model.network import KneeNet, WindowNet
+from rsna_knee.model.windows import WindowDataset, mirror_windows
 from rsna_knee.preprocess.run import preprocess_all
 from rsna_knee.preprocess.side import side_table
 
@@ -25,10 +26,13 @@ from rsna_knee.preprocess.side import side_table
 def fold_checkpoints(models_dir: Path) -> list[dict]:
     """One entry per fold checkpoint under models_dir, with what is needed to rebuild and feed it."""
     found = []
-    for checkpoint in sorted(models_dir.glob("**/fold*/model.pt")):
+    for checkpoint in sorted(models_dir.glob("**/model.pt")):  # fold<k>/ (CV models) or all_seed<s>/ (all data)
+        if not checkpoint.parent.name.startswith(("fold", "all_seed")):
+            continue
         config = json.loads((checkpoint.parent / "config.json").read_text())
         version = config.get("preprocess", "v1")
         found.append({
+            "model": config.get("model", "knee"),
             "path": checkpoint,
             "family": checkpoint.parent.parent.name,  # one training run = one model family
             "backbone": config.get("backbone", "efficientnet_b0"),
@@ -56,6 +60,32 @@ def downsize(src: Path, dst: Path, size: int) -> None:
             image, present = data["image"], data["present"]
         small = np.stack([[cv2.resize(s, (size, size), interpolation=cv2.INTER_AREA) for s in view] for view in image])
         np.savez(dst / f.name, image=small, present=present)
+
+
+@torch.no_grad()
+def predict_windows(processed: Path, uids: list[str], checkpoints: list[dict], workers: int = 2) -> pd.DataFrame:
+    """Window models: every window of the study, averaged with its anatomical mirror and over the models."""
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    version = checkpoints[0]["version"]
+    slots, sagittal = PREPROCESS[version]["slots"], tuple(i for i, s in enumerate(PREPROCESS[version]["slots"]) if s.startswith("sag"))
+    max_windows = sum(PREPROCESS[version]["slot_slices"])
+    loader = DataLoader(WindowDataset(uids, processed, max_windows=max_windows, n_views=len(slots)), batch_size=2,
+                        num_workers=workers)
+    models = []
+    for ck in checkpoints:
+        model = WindowNet(ck["backbone"], pretrained=False, n_views=len(slots))
+        model.load_state_dict(torch.load(ck["path"], map_location="cpu"))
+        models.append(model.to(device).eval())
+    rows = []
+    for windows, ids, pos, valid, _, _ in loader:
+        windows, ids, pos, valid = windows.to(device).float() / 255, ids.to(device), pos.to(device), valid.to(device)
+        mirrored, mpos = mirror_windows(windows, ids, pos, sagittal)
+        prob = 0
+        with torch.autocast(device_type=device, dtype=torch.float16, enabled=device == "cuda"):
+            for model in models:
+                prob = prob + model(windows, ids, pos, valid).float().sigmoid() + model(mirrored, ids, mpos, valid).float().sigmoid()
+        rows.append((prob / (2 * len(models))).cpu().numpy())
+    return pd.DataFrame(np.concatenate(rows), columns=LABELS).assign(StudyInstanceUID=uids)
 
 
 @torch.no_grad()
@@ -138,7 +168,10 @@ def main() -> None:
         version = group[0]["version"]
         work = prepared[version]
         ready = [uid for uid in test["StudyInstanceUID"] if (work / f"{uid}.npz").exists()]
-        family_predictions.append(predict(work, ready, group, sides=sides).set_index("StudyInstanceUID")[LABELS])
+        if group[0]["model"] == "window":
+            family_predictions.append(predict_windows(work, ready, group).set_index("StudyInstanceUID")[LABELS])
+        else:
+            family_predictions.append(predict(work, ready, group, sides=sides).set_index("StudyInstanceUID")[LABELS])
         print(f"family {family}: {len(group)} models, preprocessing {version}", flush=True)
     # Average within a family (its folds), then give every family an equal vote.
     predictions = (sum(family_predictions) / len(family_predictions)).reset_index()
