@@ -132,3 +132,9 @@ Each entry: the choice, why, the evidence, and what would change it.
 - **Why:** a cruciate tear shows on two slices, osteoarthritis on many; one shared pooling makes them compete. Every (view, slice) is a token; each of the 12 findings has its own attention over all tokens and its own output. Used by the strongest public single models.
 - **Result (v3, round-2 labels, fold 0):** alone it ties the shared pooling (gold 0.919 vs 0.921, within noise), but its predictions differ more (rank correlation with v2 0.94 vs 0.97), so v2 + v3 per-finding averages best (0.924). It becomes the second model family.
 - **320 px alone did not help** (0.921 vs 0.920 at 256 px): resolution is not our bottleneck at B0 size.
+
+## D28. Slice handling is not a lever; families are
+- **Ideas 1-2 (one change each, leaderboard):** blank repeated slices 0.935 -> 0.936; slices ~3 mm apart 0.936 -> 0.935. Both inside leaderboard noise (one tick). They change how slices are fed, not what the model sees: 62% of series have fewer than 32 slices anyway, and mm spacing changes only thin-slice scans (~5%).
+- **Second family (E2):** R2 + v3 per-finding 0.935 -> 0.939. Averaging models that make different mistakes moved the score; next families: ConvNeXt (X1).
+- **Round 3 with one uniform mix stopped:** gold 0.921 -> 0.917 on folds 0-1. Next label work changes the mix per finding type (X2) instead.
+

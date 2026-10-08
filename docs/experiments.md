@@ -24,6 +24,12 @@ Val = gold-58 macro AUC of the run's ensemble (models never train on the 58). LB
 | R2 5f | Round-2 students, all 5 folds | 0.922 (dev 0.933 / test 0.904) vs r1 0.919 (test 0.900) | **0.935** | – |
 | V3 | v3 data (320 px, 0.47 mm/px), round-2 labels, fold 0 | shared pooling 0.921 (test 0.901), per-finding attention 0.919 (test 0.895) vs v2 0.920 (0.897) | – | – |
 | V3+ | v2 fold 0 + v3 per-finding fold 0 averaged | 0.924 (test 0.902); rank corr 0.94 (v2 vs v3 shared: 0.97) | – | – |
+| E2 | R2 + v3 per-finding (2 families, 10 models), family average | 0.923 (test 0.904) | **0.939** | – |
+| I1 | Idea 1: blank repeated slices instead of feeding them twice (v2, R2 labels, 5 folds) | 0.919 (test 0.898); noise (R2 re-run, other seed, fold 0): 0.004 | 0.936 (+0.001) | – |
+| I2 | Idea 2: + slices ~3 mm apart (v4 data, 4 views) | 0.922 (test 0.902) | 0.935 (-0.001 vs I1) | – |
+| I3 | Idea 3: + 5th view, coronal non-fat-sat (v4, 5 views) | 0.915 (test 0.893) | pending | – |
+| R3 | Round 3, uniform mix 0.3 (R2 + v3 teachers), folds 0-1 | 0.917 (test 0.898) vs R2 0.921 (0.905) | – (stopped) | – |
+| X1g | ConvNeXt-Tiny lr 1e-4, 5 folds; B0 R2 + ConvNeXt | ConvNeXt 0.921 (test 0.904); pair 0.923 (test **0.907**) | pending | – |
 | A3 | ResNet-50 mean pooling on v2, round-2 labels, fold 0 | 0.905 (test 0.886) vs B0 0.920; B0+R50 0.917 < B0 alone; rank corr 0.92 (was 0.86) | dropped | – |
 
 One change per row. CV = mean OOF macro AUC vs pseudo-labels (site-grouped 5-fold). Gold = macro AUC vs gold test 29 (looked at rarely).
