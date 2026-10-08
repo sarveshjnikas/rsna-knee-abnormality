@@ -34,6 +34,16 @@ def build_study(series: pd.DataFrame, study_dir: Path, version: str = "v1") -> d
     space slices by mm also valid: (slots, n_slices) bool, real slices first and blanks after."""
     cfg = PREPROCESS[version]
     slots = cfg.get("slots", SLOTS)
+    if "slot_slices" in cfg:  # one array per view, its real slices only: s0 .. s4, each (k, size, size)
+        out = {"present": np.zeros(len(slots), dtype=bool)}
+        for i in range(len(slots)):
+            out[f"s{i}"] = np.zeros((0, cfg["image_size"], cfg["image_size"]), dtype=np.uint8)
+        for slot, series_uid in choose_series(series, study_dir, slots).items():
+            i = slots.index(slot)
+            out[f"s{i}"] = load_volume(study_dir / series_uid, cfg["slot_slices"][i], cfg["image_size"], cfg["crop_mm"],
+                                       cfg["slice_range"], unique=True)
+            out["present"][i] = True
+        return out
     image = np.zeros((len(slots), cfg["n_slices"], cfg["image_size"], cfg["image_size"]), dtype=np.uint8)
     present = np.zeros(len(slots), dtype=bool)
     valid = np.zeros((len(slots), cfg["n_slices"]), dtype=bool)

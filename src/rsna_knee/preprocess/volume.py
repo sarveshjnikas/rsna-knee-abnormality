@@ -108,13 +108,15 @@ def _frames(path: Path) -> np.ndarray:
 
 
 def load_volume(series_dir: Path, n_slices: int = N_SLICES, size: int = IMAGE_SIZE, crop_mm: float | None = None,
-                slice_range: tuple[float, float] = (0.0, 1.0), spacing_mm: float | None = None) -> np.ndarray:
-    """(n_slices, size, size) uint8; with spacing_mm, (k <= n_slices, size, size) with no repeated slice."""
+                slice_range: tuple[float, float] = (0.0, 1.0), spacing_mm: float | None = None,
+                unique: bool = False) -> np.ndarray:
+    """(n_slices, size, size) uint8; with spacing_mm or unique, (k <= n_slices, size, size) with no repeated slice."""
     paths, positions = sorted_slices(series_dir)
 
     def pick(n_total: int) -> np.ndarray:
         if not spacing_mm:
-            return pick_indices(n_total, n_slices, slice_range)
+            picked = pick_indices(n_total, n_slices, slice_range)
+            return np.unique(picked) if unique else picked
         if positions is not None and len(positions) == n_total:
             return pick_by_mm(positions, n_slices, slice_range, spacing_mm)
         return np.unique(pick_indices(n_total, n_slices, slice_range))  # no geometry: by count, no repeats
