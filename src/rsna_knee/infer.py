@@ -7,6 +7,8 @@
 import argparse
 import json
 import os
+import shutil
+import traceback
 from pathlib import Path
 
 import cv2
@@ -59,7 +61,7 @@ def downsize(src: Path, dst: Path, size: int) -> None:
         with np.load(f) as data:
             image, present = data["image"], data["present"]
         small = np.stack([[cv2.resize(s, (size, size), interpolation=cv2.INTER_AREA) for s in view] for view in image])
-        np.savez(dst / f.name, image=small, present=present)
+        np.savez_compressed(dst / f.name, image=small, present=present)  # uncompressed copies can fill the disk
 
 
 @torch.no_grad()
@@ -155,6 +157,7 @@ def main() -> None:
             if len(errors) > 0.05 * max(n_series_studies, 1):  # a broken decoder must fail the run, not hide in averages
                 raise RuntimeError(f"{len(errors)} of {n_series_studies} test studies failed preprocessing ({version})")
         prepared[version] = work
+        print(f"{version} ready; disk free {shutil.disk_usage(args.work).free / 1e9:.1f} GB", flush=True)
 
     sides = None
     if any(c["canonical_side"] for c in checkpoints):  # headers only: one file per test series
@@ -163,16 +166,25 @@ def main() -> None:
         print(f"knee sides: {table['side'].value_counts(dropna=False).to_dict()}", flush=True)
 
     family_predictions = []
-    for family in sorted({c["family"] for c in checkpoints}):
+    families = sorted({c["family"] for c in checkpoints})
+    for family in families:
         group = [c for c in checkpoints if c["family"] == family]
         version = group[0]["version"]
         work = prepared[version]
         ready = [uid for uid in test["StudyInstanceUID"] if (work / f"{uid}.npz").exists()]
-        if group[0]["model"] == "window":
-            family_predictions.append(predict_windows(work, ready, group).set_index("StudyInstanceUID")[LABELS])
-        else:
-            family_predictions.append(predict(work, ready, group, sides=sides).set_index("StudyInstanceUID")[LABELS])
-        print(f"family {family}: {len(group)} models, preprocessing {version}", flush=True)
+        try:
+            if group[0]["model"] == "window":
+                family_predictions.append(predict_windows(work, ready, group).set_index("StudyInstanceUID")[LABELS])
+            else:
+                family_predictions.append(predict(work, ready, group, sides=sides).set_index("StudyInstanceUID")[LABELS])
+            print(f"family {family}: {len(group)} models, preprocessing {version}", flush=True)
+        except Exception:  # one broken family must not cost the submission; the others still vote
+            print(f"family {family} FAILED:\n{traceback.format_exc()}", flush=True)
+        later = {c["version"] for c in checkpoints if c["family"] in families[families.index(family) + 1:]}
+        if version not in later:  # free the disk as soon as no later family reads this version
+            shutil.rmtree(work, ignore_errors=True)
+    if not family_predictions:
+        raise RuntimeError("every model family failed")
     # Average within a family (its folds), then give every family an equal vote.
     predictions = (sum(family_predictions) / len(family_predictions)).reset_index()
 
