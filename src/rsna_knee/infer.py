@@ -91,7 +91,7 @@ def predict_windows(processed: Path, uids: list[str], checkpoints: list[dict], w
 
 
 @torch.no_grad()
-def predict(processed: Path, uids: list[str], checkpoints: list[dict], batch_size: int = 4,
+def predict(processed: Path, uids: list[str], checkpoints: list[dict], batch_size: int = 2,
             workers: int = 2, flip_tta: bool = True, sides: dict[str, str] | None = None) -> pd.DataFrame:
     """Mean sigmoid probability over fold models (and a left-right flip of every view), one row per study."""
     device = "cuda" if torch.cuda.is_available() else "cpu"

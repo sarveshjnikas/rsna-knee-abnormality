@@ -12,7 +12,10 @@ Worn-out joint (arthritis)	Medial OA, Lateral OA, PF OA
 Fluid/swelling	            Effusion, Synovitis, Baker's cyst
 Bone damage	                Contusion (bruise), Fracture
 
-in this problem most studies have no labels. but every training study comes with a radiologists report.
-at test time we only get images.
-text - labels psuedo labelling
+in this problem most studies have no labels. but every training study comes with a radiologists report. at test time we only get images.
+text to labels psuedo labelling. weak supervision. 
 
+there are only 58 studies with label out of total 4407 studies.
+
+
+the very first component we build is a labeller
