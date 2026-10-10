@@ -37,6 +37,7 @@ IMAGE_SIZE = 256  # pixels per side after cropping and padding to square
 #   v1: crop to the body (scale varies by study), slices across the whole stack
 #   v2: fixed physical crop around the knee (same mm per pixel everywhere), central slices only
 #   v3: v2 at higher resolution (320 px, 0.47 mm per pixel instead of 0.59)
+#   v6: v5 at 448 px (0.31 mm per pixel), for small findings such as meniscus tears
 #   v5: finer detail for window models: 140 mm crop at 384 px (0.36 mm per pixel), 5 views with their own
 #       slice counts (more where small findings sit), each view stored as its real slices only (no padding)
 #   v4: v2 framing, but slices about 3 mm apart (at most 32, never repeated; blanks after the real ones,
@@ -48,5 +49,7 @@ PREPROCESS = {
     "v4": {"n_slices": 32, "image_size": 256, "crop_mm": 150.0, "slice_range": (0.06, 0.94), "spacing_mm": 3.0,
            "slots": SLOTS_5},
     "v5": {"n_slices": 26, "image_size": 384, "crop_mm": 140.0, "slice_range": (0.06, 0.94), "slots": SLOTS_5,
+           "slot_slices": (26, 18, 18, 22, 12)},  # sag_FS, cor_FS, axi_FS, sag_noFS, cor_noFS: 96 in total
+    "v6": {"n_slices": 26, "image_size": 448, "crop_mm": 140.0, "slice_range": (0.06, 0.94), "slots": SLOTS_5,
            "slot_slices": (26, 18, 18, 22, 12)},  # sag_FS, cor_FS, axi_FS, sag_noFS, cor_noFS: 96 in total
 }
