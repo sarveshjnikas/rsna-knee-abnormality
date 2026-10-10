@@ -61,6 +61,24 @@ class LabelAttention(nn.Module):
         return (self.drop(self.norm(pooled)) * self.weight).sum(-1) + self.bias
 
 
+class QueryAttention(nn.Module):
+    """One learned query per label attends over all window tokens (multi-head cross-attention), then one
+    linear output per label. Label identity drives the attention directly; cost is tiny (12 queries)."""
+
+    def __init__(self, dim: int, n_labels: int, dropout: float, heads: int = 4):
+        super().__init__()
+        self.queries = nn.Parameter(torch.randn(1, n_labels, dim) * dim ** -0.5)
+        self.attention = nn.MultiheadAttention(dim, heads, dropout=dropout, batch_first=True)
+        self.norm, self.drop = nn.LayerNorm(dim), nn.Dropout(dropout)
+        self.weight = nn.Parameter(torch.randn(n_labels, dim) * dim ** -0.5)
+        self.bias = nn.Parameter(torch.zeros(n_labels))
+
+    def forward(self, tokens: torch.Tensor, valid: torch.Tensor) -> torch.Tensor:  # (B, T, D), (B, T) -> (B, L)
+        queries = self.queries.expand(tokens.shape[0], -1, -1)
+        pooled, _ = self.attention(queries, tokens, tokens, key_padding_mask=~valid, need_weights=False)
+        return (self.drop(self.norm(pooled)) * self.weight).sum(-1) + self.bias
+
+
 class KneeNet(nn.Module):
     def __init__(self, n_slots: int, n_slices: int, backbone: str = "efficientnet_b0", pretrained: bool = True,
                  n_labels: int = len(LABELS), dropout: float = 0.2, fusion: str = "attention"):
@@ -112,13 +130,15 @@ class WindowNet(nn.Module):
     """
 
     def __init__(self, backbone: str = "coatnet_rmlp_2_rw_384.sw_in12k_ft_in1k", pretrained: bool = True,
-                 n_views: int = 5, n_labels: int = len(LABELS), dropout: float = 0.2, chunk: int = 32):
+                 n_views: int = 5, n_labels: int = len(LABELS), dropout: float = 0.2, chunk: int = 32,
+                 head: str = "label"):
         super().__init__()
         self.encoder = timm.create_model(backbone, pretrained=pretrained, num_classes=0)
         dim = self.encoder.num_features
         self.view_type = nn.Embedding(n_views, dim)
         self.position = nn.Sequential(nn.Linear(1, dim // 4), nn.Tanh(), nn.Linear(dim // 4, dim))
-        self.label_attention = LabelAttention(dim, n_labels, dropout)
+        head_class = {"label": LabelAttention, "query": QueryAttention}[head]  # "query": learned query per label
+        self.label_attention = head_class(dim, n_labels, dropout)
         self.chunk = chunk  # windows per backbone call: bounds memory at 384 px
         self.register_buffer("mean", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
         self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))

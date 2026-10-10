@@ -45,6 +45,17 @@ def mirror_windows(windows: torch.Tensor, view_ids: torch.Tensor, positions: tor
     return flipped, torch.where(is_sag, 1 - positions, positions)
 
 
+def quota_pick(view_ids: np.ndarray, k: int) -> np.ndarray:
+    """k window indices with every present view represented: an equal share per view first (all of a view's
+    windows when it has fewer), the rest of the budget filled at random from the windows not yet taken."""
+    views = np.unique(view_ids)
+    share = k // len(views)
+    picked = [np.random.permutation(np.flatnonzero(view_ids == v))[:share] for v in views]
+    taken = np.concatenate(picked)
+    rest = np.setdiff1d(np.arange(len(view_ids)), taken)
+    return np.random.permutation(np.concatenate([taken, np.random.permutation(rest)[: k - len(taken)]]))
+
+
 class WindowDataset(Dataset):
     """Items: windows uint8 (K, 3, H, W), view ids (K,), positions (K,), valid (K,), target (12,), uid.
 
@@ -53,11 +64,11 @@ class WindowDataset(Dataset):
     """
 
     def __init__(self, uids: list[str], processed_dir: Path, labels: pd.DataFrame | None = None, k: int = 0,
-                 max_windows: int = 96, n_views: int = 5):
+                 max_windows: int = 96, n_views: int = 5, view_quota: bool = False):
         self.uids = list(uids)
         self.processed_dir = Path(processed_dir)
         self.targets = labels.set_index("StudyInstanceUID")[LABELS] if labels is not None else None
-        self.k, self.max_windows, self.n_views = k, max_windows, n_views
+        self.k, self.max_windows, self.n_views, self.view_quota = k, max_windows, n_views, view_quota
 
     def __len__(self) -> int:
         return len(self.uids)
@@ -68,7 +79,10 @@ class WindowDataset(Dataset):
             views = [data[f"s{v}"] for v in range(self.n_views)]
         windows, view_ids, positions = study_windows(views)
         size = self.k or self.max_windows
-        pick = np.random.permutation(len(windows))[:size] if self.k else np.arange(min(len(windows), size))
+        if self.k and self.view_quota:
+            pick = quota_pick(view_ids, self.k)
+        else:
+            pick = np.random.permutation(len(windows))[:size] if self.k else np.arange(min(len(windows), size))
         n, h, w = len(pick), windows.shape[2], windows.shape[3]
         out = np.zeros((size, 3, h, w), dtype=np.uint8)
         ids, pos, valid = np.zeros(size, dtype=np.int64), np.zeros(size, dtype=np.float32), np.zeros(size, dtype=bool)

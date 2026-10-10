@@ -38,6 +38,7 @@ def fold_checkpoints(models_dir: Path) -> list[dict]:
             "path": checkpoint,
             "family": checkpoint.parent.parent.name,  # one training run = one model family
             "backbone": config.get("backbone", "efficientnet_b0"),
+            "head": config.get("head", "label"),
             "fusion": config.get("fusion", "attention"),
             "version": version,
             "n_slices": int(config.get("n_slices", PREPROCESS[version]["n_slices"])),
@@ -75,7 +76,7 @@ def predict_windows(processed: Path, uids: list[str], checkpoints: list[dict], w
                         num_workers=workers)
     models = []
     for ck in checkpoints:
-        model = WindowNet(ck["backbone"], pretrained=False, n_views=len(slots))
+        model = WindowNet(ck["backbone"], pretrained=False, n_views=len(slots), head=ck["head"])
         model.load_state_dict(torch.load(ck["path"], map_location="cpu"))
         models.append(model.to(device).eval())
     rows = []

@@ -66,6 +66,8 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--limit", type=int, default=0, help="debug: use only this many training studies")
     p.add_argument("--grad-checkpointing", action="store_true")
+    p.add_argument("--head", default="label", choices=["label", "query"], help="query: learned query per label")
+    p.add_argument("--view-quota", action="store_true", help="training windows: an equal share per view")
     args = p.parse_args()
 
     torch.manual_seed(args.seed)
@@ -94,7 +96,7 @@ def main() -> None:
     max_windows = sum(cfg["slot_slices"])
     loader_args = dict(num_workers=args.workers, pin_memory=device == "cuda")
     train_loader = DataLoader(WindowDataset(train_uids, args.processed, labels, k=args.k, max_windows=max_windows,
-                                            n_views=n_views),
+                                            n_views=n_views, view_quota=args.view_quota),
                               batch_size=args.batch_size, shuffle=True, drop_last=True, **loader_args)
     eval_args = dict(batch_size=2, **loader_args)
     val_loader = DataLoader(WindowDataset(val_uids, args.processed, labels, max_windows=max_windows, n_views=n_views),
@@ -102,7 +104,7 @@ def main() -> None:
     gold_loader = DataLoader(WindowDataset(gold_uids, args.processed, max_windows=max_windows, n_views=n_views),
                              **eval_args)
 
-    model = WindowNet(args.backbone, pretrained=True, n_views=n_views).to(device)
+    model = WindowNet(args.backbone, pretrained=True, n_views=n_views, head=args.head).to(device)
     if args.grad_checkpointing:
         model.encoder.set_grad_checkpointing(True)
     backbone = [p for n, p in model.named_parameters() if n.startswith("encoder.")]
