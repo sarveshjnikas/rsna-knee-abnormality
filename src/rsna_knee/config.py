@@ -52,4 +52,8 @@ PREPROCESS = {
            "slot_slices": (26, 18, 18, 22, 12)},  # sag_FS, cor_FS, axi_FS, sag_noFS, cor_noFS: 96 in total
     "v6": {"n_slices": 26, "image_size": 448, "crop_mm": 140.0, "slice_range": (0.06, 0.94), "slots": SLOTS_5,
            "slot_slices": (26, 18, 18, 22, 12)},  # sag_FS, cor_FS, axi_FS, sag_noFS, cor_noFS: 96 in total
+    # v7: radiologist review - only ~6/18 coronal and ~4-6/18 axial slices crossed the joint, and the trim dropped
+    # the proximal suprapatellar recess (synovitis). Denser coronal/axial, lighter trim; same 140 mm / 384 px.
+    "v7": {"n_slices": 26, "image_size": 384, "crop_mm": 140.0, "slice_range": (0.03, 0.97), "slots": SLOTS_5,
+           "slot_slices": (26, 30, 30, 22, 20)},  # 128 in total
 }

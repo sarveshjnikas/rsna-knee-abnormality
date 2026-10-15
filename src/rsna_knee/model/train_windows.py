@@ -21,27 +21,37 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-from rsna_knee.config import LABEL_DIR, LABELS, PREPROCESS, RAW, SPLITS
+from rsna_knee.config import INTERIM, LABEL_DIR, LABELS, PREPROCESS, RAW, SPLITS
 from rsna_knee.model.network import WindowNet
 from rsna_knee.model.train import macro_auc, masked_bce
-from rsna_knee.model.windows import WindowDataset, mirror_windows
+from rsna_knee.model.windows import WindowDataset, canonicalise, mirror_windows
 
 
 def sagittal_views(version: str) -> tuple[int, ...]:
     return tuple(i for i, name in enumerate(PREPROCESS[version]["slots"]) if name.startswith("sag"))
 
 
+AMP = torch.bfloat16
+
+
 @torch.no_grad()
-def predict(model: WindowNet, loader: DataLoader, device: str, sagittal: tuple[int, ...]) -> np.ndarray:
-    """Probabilities averaged over the study and its anatomical mirror."""
+def predict(model: WindowNet, loader: DataLoader, device: str, sagittal: tuple[int, ...],
+            left: set[str] | None = None) -> np.ndarray:
+    """Probabilities averaged over the study and its anatomical mirror; with left (canonical side), one view only:
+    left knees mirrored into the right-knee layout (averaging with the mirror would blend medial and lateral)."""
     model.eval()
     out = []
-    for windows, ids, pos, valid, _, _ in loader:
+    for windows, ids, pos, valid, _, uids in loader:
         windows, ids, pos, valid = windows.to(device).float() / 255, ids.to(device), pos.to(device), valid.to(device)
-        with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=device == "cuda"):
-            p = model(windows, ids, pos, valid).float().sigmoid()
-            mirrored, mpos = mirror_windows(windows, ids, pos, sagittal)
-            p = (p + model(mirrored, ids, mpos, valid).float().sigmoid()) / 2
+        with torch.autocast(device_type="cuda", dtype=AMP, enabled=device == "cuda"):
+            if left is not None:
+                is_left = torch.tensor([u in left for u in uids], device=device)
+                windows, pos = canonicalise(windows, ids, pos, sagittal, is_left)
+                p = model(windows, ids, pos, valid).float().sigmoid()
+            else:
+                p = model(windows, ids, pos, valid).float().sigmoid()
+                mirrored, mpos = mirror_windows(windows, ids, pos, sagittal)
+                p = (p + model(mirrored, ids, mpos, valid).float().sigmoid()) / 2
         out.append(p.cpu().numpy())
     return np.concatenate(out)
 
@@ -68,6 +78,13 @@ def main() -> None:
     p.add_argument("--grad-checkpointing", action="store_true")
     p.add_argument("--head", default="label", choices=["label", "query"], help="query: learned query per label")
     p.add_argument("--view-quota", action="store_true", help="training windows: an equal share per view")
+    p.add_argument("--canonical-side", action="store_const", const="R", default=None,
+                   help="mirror left knees into the right-knee layout (train and eval), no mirror averaging")
+    p.add_argument("--amp", default="bf16", choices=["bf16", "fp16"], help="fp16 (+ loss scaling) on GPUs without bf16")
+    p.add_argument("--backbone-weights", default=None, help="pretrained weight file for the backbone (offline)")
+    p.add_argument("--mixer", type=int, default=0, help="transformer layers over all windows before pooling")
+    p.add_argument("--silent-synovitis-weight", type=float, default=1.0,
+                   help="loss weight for synovitis where the report does not mention it (silence is not a reliable no)")
     args = p.parse_args()
 
     torch.manual_seed(args.seed)
@@ -82,7 +99,20 @@ def main() -> None:
         "max_windows": str(sum(cfg["slot_slices"]))}
     (out / "config.json").write_text(json.dumps(config, indent=2))
 
+    global AMP
+    AMP = torch.bfloat16 if args.amp == "bf16" else torch.float16
+    scaler = torch.amp.GradScaler("cuda", enabled=args.amp == "fp16" and device == "cuda")
     labels = pd.read_csv(args.labels)
+    left = None
+    if args.canonical_side:
+        sides = pd.read_csv(INTERIM / "knee_side.csv")
+        left = set(sides.loc[sides["side"] == "L", "StudyInstanceUID"])  # unknown side: kept as stored
+    cell_weight = None
+    if args.silent_synovitis_weight != 1.0:
+        status = pd.read_csv(LABEL_DIR / "status_v2_gpt-6.1-sol.csv").set_index("StudyInstanceUID")
+        cell_weight = pd.DataFrame(1.0, index=labels["StudyInstanceUID"], columns=LABELS)
+        silent = cell_weight.index.isin(status.index[status["Synovitis"] == "not_addressed"])
+        cell_weight.loc[silent, "Synovitis"] = args.silent_synovitis_weight
     folds = pd.read_csv(args.folds)
     gold = pd.read_csv(RAW / "train.csv").merge(pd.read_csv(SPLITS / "gold_split.csv"), on="StudyInstanceUID")
     available = {f.stem for f in args.processed.glob("*.npz")}
@@ -104,11 +134,13 @@ def main() -> None:
     gold_loader = DataLoader(WindowDataset(gold_uids, args.processed, max_windows=max_windows, n_views=n_views),
                              **eval_args)
 
-    model = WindowNet(args.backbone, pretrained=True, n_views=n_views, head=args.head).to(device)
+    model = WindowNet(args.backbone, pretrained=True, n_views=n_views, head=args.head, mixer=args.mixer,
+                      weights_file=args.backbone_weights).to(device)
     if args.grad_checkpointing:
         model.encoder.set_grad_checkpointing(True)
-    backbone = [p for n, p in model.named_parameters() if n.startswith("encoder.")]
-    head = [p for n, p in model.named_parameters() if not n.startswith("encoder.")]
+    slow = ("encoder.", "mixer.", "mix_gate")  # the mixer opens slowly: at head lr it wrecked the features (wmix2)
+    backbone = [p for n, p in model.named_parameters() if n.startswith(slow)]
+    head = [p for n, p in model.named_parameters() if not n.startswith(slow)]
     optimizer = torch.optim.AdamW([{"params": backbone, "lr": args.backbone_lr}, {"params": head, "lr": args.head_lr}],
                                   weight_decay=args.weight_decay)
     total_steps, warmup = args.epochs * len(train_loader), len(train_loader)
@@ -122,22 +154,29 @@ def main() -> None:
     for epoch in range(args.epochs):
         model.train()
         start, losses = time.time(), []
-        for windows, ids, pos, valid, target, _ in train_loader:
+        for windows, ids, pos, valid, target, uids in train_loader:
             windows = windows.to(device, non_blocking=True).float() / 255
             gain = torch.empty(windows.shape[0], 1, 1, 1, 1, device=device).uniform_(0.9, 1.1)
             windows = (windows * gain).clamp(0, 1)  # scanner brightness differences
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=device == "cuda"):
+            if left is not None:
+                is_left = torch.tensor([u in left for u in uids], device=device)
+                windows, pos_c = canonicalise(windows, ids.to(device), pos.to(device), sagittal, is_left)
+                pos = pos_c
+            with torch.autocast(device_type="cuda", dtype=AMP, enabled=device == "cuda"):
                 logits = model(windows, ids.to(device), pos.to(device), valid.to(device)).float()
-            loss = masked_bce(logits, target.to(device))
+            weight = None if cell_weight is None else torch.tensor(cell_weight.loc[list(uids)].to_numpy(np.float32), device=device)
+            loss = masked_bce(logits, target.to(device), weight)
             optimizer.zero_grad(set_to_none=True)
-            loss.backward()
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
             schedule.step()
             losses.append(loss.item())
 
-        val_auc = macro_auc(val_targets, predict(model, val_loader, device, sagittal), val_known) if val_uids else float("nan")
-        gold_auc = macro_auc(gold_targets, predict(model, gold_loader, device, sagittal))
+        val_auc = macro_auc(val_targets, predict(model, val_loader, device, sagittal, left), val_known) if val_uids else float("nan")
+        gold_auc = macro_auc(gold_targets, predict(model, gold_loader, device, sagittal, left))
         row = {"epoch": epoch, "train_loss": float(np.mean(losses)), "seconds": round(time.time() - start),
                "gpu_peak_gb": round(torch.cuda.max_memory_allocated() / 1e9, 1) if device == "cuda" else None,
                "val_auc": val_auc, "gold_auc": gold_auc}
@@ -151,11 +190,11 @@ def main() -> None:
     averaged = {k: sum(state[k].float() for _, _, state in kept) / len(kept) for k in kept[0][2]}
     model.load_state_dict({k: v.to(model.state_dict()[k].dtype) for k, v in averaged.items()})
     torch.save(model.state_dict(), out / "model.pt")
-    gold_scores = predict(model, gold_loader, device, sagittal)
+    gold_scores = predict(model, gold_loader, device, sagittal, left)
     pd.DataFrame(gold_scores, columns=LABELS).assign(StudyInstanceUID=gold_uids).to_csv(out / "gold.csv", index=False)
     summary = {"averaged_epochs": sorted(e for _, e, _ in kept), "gold_auc": macro_auc(gold_targets, gold_scores)}
     if val_uids:
-        val_scores = predict(model, val_loader, device, sagittal)
+        val_scores = predict(model, val_loader, device, sagittal, left)
         pd.DataFrame(val_scores, columns=LABELS).assign(StudyInstanceUID=val_uids).to_csv(out / "oof.csv", index=False)
         summary["val_auc"] = macro_auc(val_targets, val_scores, val_known)
     print(json.dumps({"averaged": summary}), flush=True)

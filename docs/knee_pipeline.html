@@ -1,0 +1,161 @@
+<title>Knee MRI Pipeline</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; the flow diagram is the centrepiece, then the score ladder and the lessons. */
+:root{
+  --bg:#f5f7f8; --panel:#ffffff; --fg:#17212b; --muted:#5b6a78; --line:#d6dee5;
+  --accent:#0f7c86; --accent-soft:#e1f1f2; --good:#2f7d3b; --flat:#8a6d1d;
+  --display:"Newsreader",Georgia,serif; --body:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1519; --panel:#162027; --fg:#e4ebf0; --muted:#9aabb8; --line:#2a3943;
+  --accent:#4fc2cb; --accent-soft:#163238; --good:#7ccf86; --flat:#d8b75a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1519; --panel:#162027; --fg:#e4ebf0; --muted:#9aabb8; --line:#2a3943;
+  --accent:#4fc2cb; --accent-soft:#163238; --good:#7ccf86; --flat:#d8b75a; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:980px;margin:0 auto;padding-inline:20px;padding-block:28px 56px;display:grid;gap:36px}
+h1,h2{font-family:var(--display);font-weight:600;text-wrap:balance;margin:0}
+h1{font-size:2.1rem;line-height:1.15}
+h2{font-size:1.4rem;margin-bottom:12px}
+p{margin:0;max-width:68ch}
+.lede{color:var(--muted);margin-top:8px}
+.eyebrow{font-family:var(--mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.diagram{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto}
+.flow{display:grid;gap:14px;min-width:640px}
+.lane{display:grid;grid-template-columns:130px 1fr;gap:14px;align-items:stretch}
+.lane-name{font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:10px}
+.steps{display:flex;gap:10px;align-items:stretch;flex-wrap:nowrap}
+.step{flex:1 1 0;min-width:0;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--bg)}
+.step b{display:block;font-weight:600;font-size:.92rem}
+.step span{display:block;color:var(--muted);font-size:.8rem;line-height:1.4;margin-top:3px}
+.step.key{border-color:var(--accent);background:var(--accent-soft)}
+.arrow{align-self:center;color:var(--muted);font-family:var(--mono)}
+.metric{font-family:var(--mono);font-size:.75rem;color:var(--accent);margin-top:6px;display:block}
+.models{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.best td{font-weight:600}
+.tablebox{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 8px}
+.bar{height:8px;border-radius:4px;background:var(--accent);display:block;margin-top:5px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.two>div{min-width:0}
+ul{margin:0;padding-left:18px;display:grid;gap:6px}
+.tag{font-family:var(--mono);font-size:.72rem;padding:2px 7px;border-radius:999px;border:1px solid currentColor}
+.good{color:var(--good)} .flat{color:var(--flat)}
+@media (max-width:640px){.two,.models{grid-template-columns:1fr}h1{font-size:1.7rem}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">RSNA Knee Abnormality Detection · 12 findings · macro AUC</div>
+    <h1>How our knee MRI models are built</h1>
+    <p class="lede">From radiology reports and DICOM series to a leaderboard submission. Every component is our own code; only the ImageNet starting weights come from outside.</p>
+  </header>
+
+  <section>
+    <h2>The pipeline</h2>
+    <div class="diagram">
+      <div class="flow">
+        <div class="lane">
+          <div class="lane-name">1 · Labels</div>
+          <div class="steps">
+            <div class="step"><b>Radiology reports</b><span>4,407 training studies have text, not image labels</span></div>
+            <div class="arrow">→</div>
+            <div class="step"><b>LLM reads each report</b><span>12 findings × 5 states: positive, uncertain, mild, absent, not mentioned</span><span class="metric">report alone: gold 0.872</span></div>
+            <div class="arrow">→</div>
+            <div class="step key"><b>Soft labels</b><span>report mixed with out-of-fold image predictions (self-training); weight per finding type</span><span class="metric">gold 0.938</span></div>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="lane-name">2 · Images</div>
+          <div class="steps">
+            <div class="step"><b>DICOM series</b><span>several sequences per study, 10–60 slices each</span></div>
+            <div class="arrow">→</div>
+            <div class="step"><b>Pick one series per view</b><span>sagittal, coronal, axial (fat-sat) + sagittal, coronal (non-fat-sat)</span></div>
+            <div class="arrow">→</div>
+            <div class="step key"><b>Fixed-mm crop around the knee</b><span>v2: 4 views × 32 slices, 256 px<br>v5: 5 views, 96 slices, 384 px<br>v6: 448 px (testing)</span></div>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="lane-name">3 · Models</div>
+          <div class="models">
+            <div class="step"><b>2.5D model (B0, ConvNeXt)</b><span>all 32 slices of a view → CNN per slice → attention over slices → transformer across views → 12 outputs</span><span class="metric">B0 alone: LB 0.935</span></div>
+            <div class="step key"><b>Window model ★</b><span>every 3-slice window (previous, slice, next) → CNN → add view and position → one attention per finding over all windows → 12 outputs. Trained on 32 random windows per step, 20 epochs, average of the last 3 epochs.</span><span class="metric">ConvNeXt v2 alone: LB 0.948</span></div>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="lane-name">4 · Checks</div>
+          <div class="steps">
+            <div class="step"><b>Gold-58</b><span>58 studies with radiologist image labels, never trained on</span></div>
+            <div class="arrow">→</div>
+            <div class="step"><b>5-fold CV</b><span>folds grouped by hospital</span></div>
+            <div class="arrow">→</div>
+            <div class="step"><b>Final models</b><span>retrained on all data, several random seeds</span></div>
+          </div>
+        </div>
+        <div class="lane">
+          <div class="lane-name">5 · Submission</div>
+          <div class="steps">
+            <div class="step"><b>Hidden test DICOMs</b><span>offline Kaggle GPU notebook</span></div>
+            <div class="arrow">→</div>
+            <div class="step"><b>Same preprocessing, every model</b><span>plus the mirror image (left ↔ right knee), averaged</span></div>
+            <div class="arrow">→</div>
+            <div class="step key"><b>Average per family, equal vote</b><span>→ submission.csv → leaderboard</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>How the score moved</h2>
+    <div class="tablebox">
+      <table>
+        <thead><tr><th>Submission</th><th>What changed</th><th>Public LB</th></tr></thead>
+        <tbody>
+          <tr><td>R2</td><td>B0 2.5D after two self-training rounds</td><td class="num">0.935<span class="bar" style="width:20%"></span></td></tr>
+          <tr><td>E2</td><td>+ a second B0 family</td><td class="num">0.939<span class="bar" style="width:36%"></span></td></tr>
+          <tr><td>X1</td><td>B0 + ConvNeXt 2.5D</td><td class="num">0.941<span class="bar" style="width:44%"></span></td></tr>
+          <tr><td>Y2</td><td>CoAtNet window model alone (2 folds)</td><td class="num">0.940<span class="bar" style="width:40%"></span></td></tr>
+          <tr><td>Y5</td><td>X1 + CoAtNet window model</td><td class="num">0.943<span class="bar" style="width:52%"></span></td></tr>
+          <tr class="best"><td>Y8</td><td>Window-ConvNeXt v2 alone: 32 windows, 20 epochs, labels by finding type</td><td class="num">0.948<span class="bar" style="width:72%"></span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lede">Bars start at 0.930. Silver line on Oct 10: about 0.951. Target: 0.952.</p>
+  </section>
+
+  <section class="two">
+    <div>
+      <h2><span class="tag good">moved the score</span></h2>
+      <ul>
+        <li>Window models: more detail, all five views, one attention per finding</li>
+        <li>Training the window model on more windows for longer</li>
+        <li>Ensembles of genuinely different model families</li>
+        <li>Labels weighted by finding type (for the window model)</li>
+      </ul>
+    </div>
+    <div>
+      <h2><span class="tag flat">stayed flat</span></h2>
+      <ul>
+        <li>Blank instead of repeated slices, 3 mm spacing, 5th view in the 2.5D model</li>
+        <li>Standard knee side, synovitis only where reported</li>
+        <li>Extra self-training rounds, more seeds of the same model</li>
+        <li>Filling silent reports from the image</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Next</h2>
+    <ul>
+      <li>Window recipe v2 on CoAtNet, then an ensemble of v2 window models only</li>
+      <li>v6 data at 448 px for small findings such as meniscus tears</li>
+      <li>Relabel the three weakest findings (lateral OA, PF OA, synovitis) from report snippets</li>
+      <li>Pick the two final submissions by hand before Oct 22</li>
+    </ul>
+  </section>
+</div>

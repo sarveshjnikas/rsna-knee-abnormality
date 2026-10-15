@@ -45,6 +45,14 @@ def mirror_windows(windows: torch.Tensor, view_ids: torch.Tensor, positions: tor
     return flipped, torch.where(is_sag, 1 - positions, positions)
 
 
+def canonicalise(windows: torch.Tensor, view_ids: torch.Tensor, positions: torch.Tensor, sagittal: tuple[int, ...],
+                 left: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Mirror the left knees of a batch (left: (B,) bool) so every knee has the right-knee layout: the stack
+    direction of sagittal series depends on the side, so slice position alone cannot say medial or lateral."""
+    mirrored, mpos = mirror_windows(windows, view_ids, positions, sagittal)
+    return torch.where(left[:, None, None, None, None], mirrored, windows), torch.where(left[:, None], mpos, positions)
+
+
 def quota_pick(view_ids: np.ndarray, k: int) -> np.ndarray:
     """k window indices with every present view represented: an equal share per view first (all of a view's
     windows when it has fewer), the rest of the budget filled at random from the windows not yet taken."""

@@ -126,19 +126,30 @@ class WindowNet(nn.Module):
 
     1. A shared pretrained 2D backbone embeds every window.
     2. Each embedding gets its view's type embedding and a learned function of its position in the view.
-    3. One attention per finding pools the windows (padding masked), then one linear output per finding.
+    3. Optional (mixer > 0): transformer layers over all windows, so windows compare notes across views
+       before pooling. A zero-initialised gate makes the start identical to the model without it.
+    4. One attention per finding pools the windows (padding masked), then one linear output per finding.
     """
 
     def __init__(self, backbone: str = "coatnet_rmlp_2_rw_384.sw_in12k_ft_in1k", pretrained: bool = True,
                  n_views: int = 5, n_labels: int = len(LABELS), dropout: float = 0.2, chunk: int = 32,
-                 head: str = "label"):
+                 head: str = "label", mixer: int = 0, weights_file: str | None = None):
         super().__init__()
-        self.encoder = timm.create_model(backbone, pretrained=pretrained, num_classes=0)
+        vit = {"dynamic_img_size": True, "dynamic_img_pad": True} if "vit" in backbone else {}  # ViTs at 384 px
+        if pretrained and weights_file:  # offline cluster: load the pretrained file directly
+            vit["pretrained_cfg_overlay"] = {"file": weights_file}
+        self.encoder = timm.create_model(backbone, pretrained=pretrained, num_classes=0, **vit)
         dim = self.encoder.num_features
         self.view_type = nn.Embedding(n_views, dim)
         self.position = nn.Sequential(nn.Linear(1, dim // 4), nn.Tanh(), nn.Linear(dim // 4, dim))
         head_class = {"label": LabelAttention, "query": QueryAttention}[head]  # "query": learned query per label
         self.label_attention = head_class(dim, n_labels, dropout)
+        self.mixer = None
+        if mixer:
+            layer = nn.TransformerEncoderLayer(dim, nhead=8, dim_feedforward=2 * dim, dropout=0.1, batch_first=True,
+                                               norm_first=True)
+            self.mixer = nn.TransformerEncoder(layer, mixer, enable_nested_tensor=False)
+            self.mix_gate = nn.Parameter(torch.zeros(1))
         self.chunk = chunk  # windows per backbone call: bounds memory at 384 px
         self.register_buffer("mean", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
         self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
@@ -150,4 +161,6 @@ class WindowNet(nn.Module):
         flat = (windows.flatten(0, 1) - self.mean) / self.std
         x = torch.cat([self.encoder(part) for part in flat.split(self.chunk)]).view(b, k, -1)
         x = x + self.view_type(view_ids) + self.position(positions.unsqueeze(-1))
+        if self.mixer is not None:
+            x = x + self.mix_gate * (self.mixer(x, src_key_padding_mask=~valid) - x)
         return self.label_attention(x, valid)

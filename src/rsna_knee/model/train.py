@@ -24,10 +24,13 @@ from rsna_knee.model.data import StudyDataset, augment
 from rsna_knee.model.network import KneeNet
 
 
-def masked_bce(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    """BCE over known targets only: a blank cell in the label file means "do not train this finding here"."""
+def masked_bce(logits: torch.Tensor, target: torch.Tensor, weight: torch.Tensor | None = None) -> torch.Tensor:
+    """BCE over known targets only: a blank cell in the label file means "do not train this finding here".
+    weight (same shape, optional) scales single cells, e.g. findings the report never mentions."""
     known = ~torch.isnan(target)
     loss = torch.nn.functional.binary_cross_entropy_with_logits(logits, target.nan_to_num(0.0), reduction="none")
+    if weight is not None:
+        loss = loss * weight
     return (loss * known).sum() / known.sum().clamp(min=1)
 
 

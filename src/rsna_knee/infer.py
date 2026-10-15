@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader
 from rsna_knee.config import LABELS, PREPROCESS, SLOTS
 from rsna_knee.model.data import StudyDataset
 from rsna_knee.model.network import KneeNet, WindowNet
-from rsna_knee.model.windows import WindowDataset, mirror_windows
+from rsna_knee.model.windows import WindowDataset, canonicalise, mirror_windows
 from rsna_knee.preprocess.run import preprocess_all
 from rsna_knee.preprocess.side import side_table
 
@@ -39,6 +39,7 @@ def fold_checkpoints(models_dir: Path) -> list[dict]:
             "family": checkpoint.parent.parent.name,  # one training run = one model family
             "backbone": config.get("backbone", "efficientnet_b0"),
             "head": config.get("head", "label"),
+            "mixer": int(config.get("mixer", 0)),
             "fusion": config.get("fusion", "attention"),
             "version": version,
             "n_slices": int(config.get("n_slices", PREPROCESS[version]["n_slices"])),
@@ -66,8 +67,13 @@ def downsize(src: Path, dst: Path, size: int) -> None:
 
 
 @torch.no_grad()
-def predict_windows(processed: Path, uids: list[str], checkpoints: list[dict], workers: int = 2) -> pd.DataFrame:
-    """Window models: every window of the study, averaged with its anatomical mirror and over the models."""
+def predict_windows(processed: Path, uids: list[str], checkpoints: list[dict], workers: int = 2,
+                    sides: dict[str, str] | None = None) -> pd.DataFrame:
+    """Window models: every window of the study, averaged with its anatomical mirror and over the models.
+    Canonical-side families: left knees mirrored into the right-knee layout, one view, no mirror averaging."""
+    canonical = checkpoints[0]["canonical_side"]
+    if canonical and sides is None:
+        raise ValueError("this family needs the test studies' knee sides")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     version = checkpoints[0]["version"]
     slots, sagittal = PREPROCESS[version]["slots"], tuple(i for i, s in enumerate(PREPROCESS[version]["slots"]) if s.startswith("sag"))
@@ -76,15 +82,22 @@ def predict_windows(processed: Path, uids: list[str], checkpoints: list[dict], w
                         num_workers=workers)
     models = []
     for ck in checkpoints:
-        model = WindowNet(ck["backbone"], pretrained=False, n_views=len(slots), head=ck["head"])
+        model = WindowNet(ck["backbone"], pretrained=False, n_views=len(slots), head=ck["head"], mixer=ck["mixer"])
         model.load_state_dict(torch.load(ck["path"], map_location="cpu"))
         models.append(model.to(device).eval())
     rows = []
-    for windows, ids, pos, valid, _, _ in loader:
+    for windows, ids, pos, valid, _, batch_uids in loader:
         windows, ids, pos, valid = windows.to(device).float() / 255, ids.to(device), pos.to(device), valid.to(device)
-        mirrored, mpos = mirror_windows(windows, ids, pos, sagittal)
         prob = 0
         with torch.autocast(device_type=device, dtype=torch.float16, enabled=device == "cuda"):
+            if canonical:
+                left = torch.tensor([sides.get(u) == "L" for u in batch_uids], device=device)
+                windows, pos = canonicalise(windows, ids, pos, sagittal, left)
+                for model in models:
+                    prob = prob + model(windows, ids, pos, valid).float().sigmoid()
+                rows.append((prob / len(models)).cpu().numpy())
+                continue
+            mirrored, mpos = mirror_windows(windows, ids, pos, sagittal)
             for model in models:
                 prob = prob + model(windows, ids, pos, valid).float().sigmoid() + model(mirrored, ids, mpos, valid).float().sigmoid()
         rows.append((prob / (2 * len(models))).cpu().numpy())
@@ -175,7 +188,7 @@ def main() -> None:
         ready = [uid for uid in test["StudyInstanceUID"] if (work / f"{uid}.npz").exists()]
         try:
             if group[0]["model"] == "window":
-                family_predictions.append(predict_windows(work, ready, group).set_index("StudyInstanceUID")[LABELS])
+                family_predictions.append(predict_windows(work, ready, group, sides=sides).set_index("StudyInstanceUID")[LABELS])
             else:
                 family_predictions.append(predict(work, ready, group, sides=sides).set_index("StudyInstanceUID")[LABELS])
             print(f"family {family}: {len(group)} models, preprocessing {version}", flush=True)

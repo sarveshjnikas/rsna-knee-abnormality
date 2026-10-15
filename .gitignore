@@ -25,3 +25,5 @@ runs/
 
 # Kaggle upload staging
 kaggle/.build/
+docs/radiology/cases/
+docs/radiology/cases2/
