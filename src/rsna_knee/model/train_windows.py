@@ -80,6 +80,7 @@ def main() -> None:
     p.add_argument("--view-quota", action="store_true", help="training windows: an equal share per view")
     p.add_argument("--canonical-side", action="store_const", const="R", default=None,
                    help="mirror left knees into the right-knee layout (train and eval), no mirror averaging")
+    p.add_argument("--vote", default="all", help='findings this family votes on in the blend, ";"-separated')
     p.add_argument("--amp", default="bf16", choices=["bf16", "fp16"], help="fp16 (+ loss scaling) on GPUs without bf16")
     p.add_argument("--backbone-weights", default=None, help="pretrained weight file for the backbone (offline)")
     p.add_argument("--mixer", type=int, default=0, help="transformer layers over all windows before pooling")

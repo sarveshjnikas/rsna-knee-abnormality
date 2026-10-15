@@ -122,3 +122,9 @@ One change per row. CV = mean OOF macro AUC vs pseudo-labels (site-grouped 5-fol
 - **All-data vs fold models:** side+v7 all-data gold 0.9328 vs v2 all-data 0.9334. The fold-level gain (+0.005 over 4 folds, P 0.84) does not survive at 100% data.
 - **Kaggle 9-epoch models (side+v7+syn0.25):** gold 0.925 / 0.930 per seed, too weak (too few epochs).
 - **Decision (user): blending.** Members must be strong (gold ≥ ~0.930) and different (correlation clearly < 0.99). Candidates on v7+side, folds 0–1: ConvNeXt-Small (wsmall7), CoAtNet window (wcoat7), ConvNeXt-T on r2 labels (wr2lab7).
+
+## Oct 15 afternoon (cluster paused by the user): blend members and the v8 region specialist
+- **Blend candidates on v7+side, folds 0–1, vs wside7 (0.9327):** ConvNeXt-Small 0.9303 (corr 0.985, blend +0.0003); ConvNeXt-T on r2 labels 0.9315 (corr 0.989, +0.0012); v7 without side 0.9325 (corr 0.990, +0.0013). All too similar to move the LB.
+- **Native resolution check (local test DICOMs):** scanners store 0.16–0.25 mm pixels, while v7 keeps 0.36 mm (140 mm → 384 px), so about half the in-plane detail is discarded.
+- **v8 = region specialist:** a 90 mm crop at 384 px (0.23 mm/px). On a test study the tibiofemoral joint, menisci and condyles fill the frame, but the patella is at or past the edge. So v8 votes only on ACL, MCL, both menisci, medial/lateral OA, contusion and fracture.
+- **Code:** per-finding family voting (`vote` in config, `blend_families` in infer.py, unit-tested); `blend_check.py run=Label;Label`. Kaggle v8 preprocessing running (CPU). `cluster/v8.sh` prepared, not started; it will start when the cluster is cleared.

@@ -40,6 +40,7 @@ def fold_checkpoints(models_dir: Path) -> list[dict]:
             "backbone": config.get("backbone", "efficientnet_b0"),
             "head": config.get("head", "label"),
             "mixer": int(config.get("mixer", 0)),
+            "vote": config.get("vote", "all"),  # findings this family votes on, ";"-separated (specialists)
             "fusion": config.get("fusion", "attention"),
             "version": version,
             "n_slices": int(config.get("n_slices", PREPROCESS[version]["n_slices"])),
@@ -140,6 +141,19 @@ def predict(processed: Path, uids: list[str], checkpoints: list[dict], batch_siz
         rows.append((prob / (len(models) * (2 if flip_tta else 1))).cpu().numpy())
     return pd.DataFrame(np.concatenate(rows), columns=LABELS).assign(StudyInstanceUID=uids)
 
+def blend_families(predictions: list[pd.DataFrame], votes: list[str]) -> pd.DataFrame:
+    """Per finding, the mean over the families that vote on it ("all", or ";"-separated finding names)."""
+    out = pd.DataFrame(0.0, index=predictions[0].index, columns=LABELS)
+    count = pd.Series(0, index=LABELS)
+    for frame, vote in zip(predictions, votes):
+        cols = LABELS if vote == "all" else [c for c in vote.split(";") if c in LABELS]
+        out[cols] += frame.loc[out.index, cols]
+        count[cols] += 1
+    if (count == 0).any():
+        raise RuntimeError(f"no family votes on {list(count[count == 0].index)}")
+    return out / count
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--comp-dir", type=Path, required=True)
@@ -179,7 +193,7 @@ def main() -> None:
         sides = table.dropna().set_index("StudyInstanceUID")["side"].to_dict()
         print(f"knee sides: {table['side'].value_counts(dropna=False).to_dict()}", flush=True)
 
-    family_predictions = []
+    family_predictions, family_votes = [], []
     families = sorted({c["family"] for c in checkpoints})
     for family in families:
         group = [c for c in checkpoints if c["family"] == family]
@@ -191,7 +205,8 @@ def main() -> None:
                 family_predictions.append(predict_windows(work, ready, group, sides=sides).set_index("StudyInstanceUID")[LABELS])
             else:
                 family_predictions.append(predict(work, ready, group, sides=sides).set_index("StudyInstanceUID")[LABELS])
-            print(f"family {family}: {len(group)} models, preprocessing {version}", flush=True)
+            family_votes.append(group[0]["vote"])
+            print(f"family {family}: {len(group)} models, preprocessing {version}, votes on {group[0]['vote']}", flush=True)
         except Exception:  # one broken family must not cost the submission; the others still vote
             print(f"family {family} FAILED:\n{traceback.format_exc()}", flush=True)
         later = {c["version"] for c in checkpoints if c["family"] in families[families.index(family) + 1:]}
@@ -199,8 +214,8 @@ def main() -> None:
             shutil.rmtree(work, ignore_errors=True)
     if not family_predictions:
         raise RuntimeError("every model family failed")
-    # Average within a family (its folds), then give every family an equal vote.
-    predictions = (sum(family_predictions) / len(family_predictions)).reset_index()
+    # Average within a family (its folds), then every family gets an equal vote on the findings it covers.
+    predictions = blend_families(family_predictions, family_votes).reset_index()
 
     # A study that failed preprocessing still needs a row: use the mean prediction (ranks it in the middle).
     submission = test[["StudyInstanceUID"]].merge(predictions, on="StudyInstanceUID", how="left")

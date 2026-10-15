@@ -56,4 +56,8 @@ PREPROCESS = {
     # the proximal suprapatellar recess (synovitis). Denser coronal/axial, lighter trim; same 140 mm / 384 px.
     "v7": {"n_slices": 26, "image_size": 384, "crop_mm": 140.0, "slice_range": (0.03, 0.97), "slots": SLOTS_5,
            "slot_slices": (26, 30, 30, 22, 20)},  # 128 in total
+    # v8: region specialist - the scanners store 0.16-0.25 mm pixels, v7 keeps 0.36 mm. A 90 mm crop at 384 px
+    # (0.23 mm) keeps near-native detail of the joint centre (menisci, condylar and tibial cartilage).
+    "v8": {"n_slices": 26, "image_size": 384, "crop_mm": 90.0, "slice_range": (0.03, 0.97), "slots": SLOTS_5,
+           "slot_slices": (26, 30, 30, 22, 20)},
 }
