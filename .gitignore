@@ -27,3 +27,4 @@ runs/
 kaggle/.build/
 docs/radiology/cases/
 docs/radiology/cases2/
+weights_dl/

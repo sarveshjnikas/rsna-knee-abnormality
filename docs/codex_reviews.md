@@ -60,3 +60,9 @@ Codex CLI, read-only, on a copy of `src/` and `docs/` only. Each entry gives the
 | Check test-time side detection and run an inference parity audit on labelled train DICOMs | Visible run: sides 2R/1L, 0 unknown; parity audit launched |
 | Replicate 2×2 (base, side, v7, side+v7) on the same folds | Folds 2–3 for side+v7 and v7 queued |
 | Locked protocol: untouched half, same-sign replication, blend only complementary models; keep Y8 as the anchor | Adopted |
+
+## 2026-10-16: X5 labels (X2 recipe, stronger window-model teacher)
+- **Verdict:** plausible but low expected value (~0 to +0.002 in a blend). The teacher is the same ConvNeXt/window family, so it mostly reinforces existing errors.
+- **Flaw:** fold 4 (868 studies) has no out-of-fold teacher. Mixing X2 targets there with X5 elsewhere makes the label noise uneven. Either produce fold-4 OOF or exclude fold 4; don't mix.
+- **Also:** check teacher calibration (per-finding mean, variance, extremes vs X2), since BCE cares about magnitude.
+- **If run:** one all-data seed as a blend candidate, not a replacement. No new mix hyperparameters.

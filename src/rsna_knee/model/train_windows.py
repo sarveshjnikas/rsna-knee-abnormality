@@ -83,6 +83,7 @@ def main() -> None:
     p.add_argument("--vote", default="all", help='findings this family votes on in the blend, ";"-separated')
     p.add_argument("--amp", default="bf16", choices=["bf16", "fp16"], help="fp16 (+ loss scaling) on GPUs without bf16")
     p.add_argument("--backbone-weights", default=None, help="pretrained weight file for the backbone (offline)")
+    p.add_argument("--freeze-bn", action="store_true", help="BatchNorm layers stay in eval mode during training")
     p.add_argument("--mixer", type=int, default=0, help="transformer layers over all windows before pooling")
     p.add_argument("--silent-synovitis-weight", type=float, default=1.0,
                    help="loss weight for synovitis where the report does not mention it (silence is not a reliable no)")
@@ -154,6 +155,10 @@ def main() -> None:
     kept, history = [], []  # kept: (score, epoch, cpu state dict) of the epochs that will be averaged
     for epoch in range(args.epochs):
         model.train()
+        if args.freeze_bn:  # BatchNorm backbones: keep pretrained running stats (a batch is one study's windows, padding included)
+            for m in model.modules():
+                if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
+                    m.eval()
         start, losses = time.time(), []
         for windows, ids, pos, valid, target, uids in train_loader:
             windows = windows.to(device, non_blocking=True).float() / 255

@@ -141,12 +141,15 @@ def predict(processed: Path, uids: list[str], checkpoints: list[dict], batch_siz
         rows.append((prob / (len(models) * (2 if flip_tta else 1))).cpu().numpy())
     return pd.DataFrame(np.concatenate(rows), columns=LABELS).assign(StudyInstanceUID=uids)
 
+VOTE_SETS = {"joint": ["ACL", "MCL", "Medial Meniscus", "Lateral Meniscus", "Medial OA", "Lateral OA", "Contusion", "Fracture"]}
+
+
 def blend_families(predictions: list[pd.DataFrame], votes: list[str]) -> pd.DataFrame:
     """Per finding, the mean over the families that vote on it ("all", or ";"-separated finding names)."""
     out = pd.DataFrame(0.0, index=predictions[0].index, columns=LABELS)
     count = pd.Series(0, index=LABELS)
     for frame, vote in zip(predictions, votes):
-        cols = LABELS if vote == "all" else [c for c in vote.split(";") if c in LABELS]
+        cols = LABELS if vote == "all" else VOTE_SETS.get(vote) or [c for c in vote.split(";") if c in LABELS]
         out[cols] += frame.loc[out.index, cols]
         count[cols] += 1
     if (count == 0).any():
