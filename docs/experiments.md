@@ -128,3 +128,48 @@ One change per row. CV = mean OOF macro AUC vs pseudo-labels (site-grouped 5-fol
 - **Native resolution check (local test DICOMs):** scanners store 0.16–0.25 mm pixels, while v7 keeps 0.36 mm (140 mm → 384 px), so about half the in-plane detail is discarded.
 - **v8 = region specialist:** a 90 mm crop at 384 px (0.23 mm/px). On a test study the tibiofemoral joint, menisci and condyles fill the frame, but the patella is at or past the edge. So v8 votes only on ACL, MCL, both menisci, medial/lateral OA, contusion and fracture.
 - **Code:** per-finding family voting (`vote` in config, `blend_families` in infer.py, unit-tested); `blend_check.py run=Label;Label`. Kaggle v8 preprocessing running (CPU). The cluster job script is prepared but not started; it will start when the cluster is cleared.
+
+## Oct 29 (post-deadline): does our validation track the LB?
+
+### 1. Gold-58 vs LB (40 scored submissions; gold known for 16)
+Gold values from the scoreboard above; Y8 / Y14 / Y15 from the Oct 13–15 notes. Gold for Y16–Y30 was never logged locally (only on the cluster). LB is rounded to 0.001.
+
+| Pair | n | Spearman | Pearson | Slope | Residual SD |
+|---|---|---|---|---|---|
+| gold-58 vs public | 16 | 0.96 | 0.96 | 0.63 | 0.0024 |
+| gold-58 vs private | 16 | 0.95 | 0.92 | 0.59 | 0.0032 |
+| gold test-29 vs public | 13 | 0.88 | 0.93 | 0.66 | 0.0025 |
+| gold-58 vs public, plateau (gold 0.919–0.923, no Y) | 8 | 0.71 | 0.54 | 0.76 | 0.0022 |
+| gold test-29 vs public, plateau | 8 | 0.53 | 0.47 | 0.32 | 0.0023 |
+| public vs private | 40 | 0.99 | 0.99 | – | gap 0.013 ± 0.0014 (0.010–0.016) |
+| public vs private, public ≥ 0.946 | 21 | 0.93 | – | – | – |
+
+- The overall 0.96 comes from the spread of early submissions (gold 0.885–0.933). Inside the plateau, gold resolves ~0.005 at best. The plateau's LB range is 0.934–0.941 for a gold range of 0.004.
+- Y8 / Y14 / Y15: gold 0.9334 / 0.9320 / 0.9328, LB 0.948 / 0.946 / 0.949. The ranks disagree.
+- Best private: Y29 / Y30 0.940 (public 0.951). Public order matched private order (Spearman 0.99), so the public LB was a good selector.
+
+### 2. Winners' labels as an independent key
+- Dataset `tascj0/rsna-2026-knee-agent-labels`, CC BY 4.0. `labels_astra_trained_guide.csv` (533 KB): 4,407 studies × 12 probabilities. GPT-6 Astra read the report and the images with a guide trained on gold-58. The full dataset is 52 MB: ROI boxes, lesion boxes, Qwen3 report embeddings, knee side.
+- Scored over the 4,349 non-gold studies. *Hard* = key ≥ 0.5 (their "hard" column). *Soft* = AUC weighted by the key probability.
+
+| Source | Soft | Hard | Gold-58 |
+|---|---|---|---|
+| Winners' labels (key itself) | 0.875 | 1.000 | 0.943 (guide fit on these 58; 0.936 out-of-fold per writeup) |
+| Our LLM report labels (L3) | 0.820 | 0.959 | 0.872 |
+| X2 | 0.849 | 0.980 | – |
+| X5 / X6 / X7 | 0.853 | 0.983 | – |
+| Public `labels_llm_soft` | 0.806 | 0.926 | – |
+| E1 OOF (b0_v3, LB 0.924) | 0.791 | 0.904 | 0.896 |
+| *Winners' per-slice baseline OOF (their key: sakaku Astra)* | *0.872* | *0.959* | *0.932* |
+| *Winners' final recipe OOF (same key)* | *0.879* | *0.964* | *0.943* |
+
+- Our X7 labels vs their key, hard AUC per finding: 0.95–0.997. The weakest are synovitis 0.956, contusion 0.972, PF OA 0.977 and fracture 0.979.
+- The same E1 OOF scores 0.858 / 0.904 / 0.925 (hard) against L3 / winners' / X7 keys. The absolute value depends on the key, so only compare models under one key.
+- **The check is not done.** Only one OOF is local (E1), so there is n = 1 against the LB. 5-fold OOFs for E1–X4 (13 submissions with LB) and the folds 0–1 window runs exist only on the cluster. Copying the `oof.csv` files (read-only) would give 13+ points for the key-vs-LB correlation.
+
+### 3. Proposed: label swap (one change)
+- Recipe: wside7 (side + v7, ConvNeXt-T, k = 43, 20 epochs, folds 0–1). Change only `--labels`: from wside7's labels (X2 by-type; check its run config) to the winners' labels with the 58 gold rows removed. An optional second arm uses calibrated labels, σ(0.77 · logit p).
+- Base to compare against: wside7 folds 0–1, gold 0.9327.
+- Score: gold-58, plus the OOF on folds 0–1 against the winners' key and against X7.
+- Cost: ~8 min per fold epoch × 20 = 2.7 GPU-h per fold. 2 folds = 5.3 GPU-h (~2.7 h wall on 2 slots); the calibrated arm adds +5.3 GPU-h. A late LB check needs 4 all-data seeds (~13 GPU-h) plus 1 Kaggle submission.
+- Not started. Waiting for the user to approve the cluster run.

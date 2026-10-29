@@ -1,6 +1,27 @@
 # RSNA Knee: what we learnt
 
-**Final:** public LB 0.951, the best of Y22, Y25, Y26, Y27, Y29 and Y30. Bronze was 0.956. All models are our own (ConvNeXt-T window models), with no public notebooks or blends.
+**Final:** public LB 0.951 / **private 0.940** (Y29, Y30). The public bronze line was 0.956. All models are our own (ConvNeXt-T window models), with no public notebooks or blends. 1st place (Team Kangaroo) scored public 0.967 / private 0.958; their single ConvNeXt-T at 256 px scored 0.964 / 0.954.
+
+## Post-mortem vs the winners (written 2026-10-29)
+
+Source: the 1st-place write-up (kaggle.com/competitions/rsna-knee-abnormality-detection/writeups/1st-place-solution) and our `kaggle competitions submissions` table. Nothing below was re-run by us; "suspected" means the write-up suggests it but does not ablate it.
+
+| Fact | Evidence |
+|---|---|
+| We did not overfit the public LB | Public to private drop: ours 0.011 (0.951 to 0.940), theirs 0.009 (0.967 to 0.958) |
+| The backbone was not the gap | Their single model was the same family (ConvNeXt-T) and beat our whole ensemble by 0.014 private |
+| Our labels were text-only | Report-text LLM labeller: gold-58 AUC 0.872, $8.68. Theirs: an agent per study viewed the slices plus the report: gold-58 AUC 0.93-0.94 |
+| We had no localisation supervision | They had agents draw 3D ROI boxes (751 studies) and lesion boxes (111,029 boxes), trained a detector, cropped around the anatomy and pooled features inside each finding's box. We used a fixed 140 mm crop and 43 sampled windows |
+| They used the report as a training target | Embedding-prediction head (Qwen3-Embedding-8B, loss weight 0.3), not used at inference. We used reports only to make labels |
+| They calibrated soft labels | Temperature k about 0.77 fitted on gold-58 |
+| Their ensemble was diverse, ours was not | MambaOut-B+, MaxxViT-V2-B, and 6-channel cross-series inputs. Ours: ConvNeXt-T windows, member correlation about 0.99 |
+| Gold-58 could not see the gap | Their plain per-slice baseline scored 0.932 on gold-58 and ours 0.933, while the LB gap was 0.015 |
+| Their selection metric was better | OOF AUC against stronger independent labels, checked against 20-30 public LB scores |
+| Their architecture steps were small | +0.007 OOF AUC in their ablation; no gain from 2.5D, 3D or study-level models |
+
+**Suspected causes, ranked (untested by us):** (1) image-aware labels, (2) box-based localisation, (3) report-embedding target, (4) label calibration, (5) ensemble diversity.
+**Decisive test not done:** train our window model on the winners' public labels dataset and compare with our labels at the same settings.
+**Correction to lesson 3 below:** the status-vs-gold table showed report text is read correctly, but the conclusion "re-labelling cannot help" held only for text-only labelling. The fix was to give the labeller the images.
 
 ## Score history (public LB)
 
@@ -28,7 +49,7 @@
 ## Lessons
 1. **Diversity beats volume.** Models that agree ~99% add nothing in a blend. Measure correlation before scaling a candidate.
 2. **Labels set the ceiling.** Our one big jump (+0.011) came from labels, while model changes gave ≤ 0.001.
-3. **Diagnose before fixing.** A free status-vs-gold table showed the report labels are read correctly. Silent or vague reports are the limit, so re-extracting with a better prompt could not help.
+3. **Diagnose before fixing, then ask what information is missing.** A free status-vs-gold table showed the report labels are read correctly, and silent or vague reports are the limit of text. That ruled out re-extracting from text, but not adding the images to the labeller, which is what the winners did.
 4. **A 58-study holdout can't resolve +0.003.** Use out-of-fold predictions over thousands of studies, scored against one fixed key. Re-ranking every idea that way showed that the leaderboard plateau was real.
 5. **Test one change at a time,** against its own base on the same folds.
 6. **Submit early.** The leaderboard caught what gold missed.
@@ -38,6 +59,10 @@
 10. **Never leave GPUs idle.** Queue the next job when you submit the current one, and test unattended scripts on the zero-jobs case: `grep -c` exits 1 on 0 matches.
 11. **Forum claims are hypotheses.** Check them against your own evidence before acting on them.
 12. **The medal is decided on the private LB.** Pick finals for robustness, not public score.
+13. **Calibrate the validation metric against the LB.** With 40+ submissions we could have checked which local metric tracked the LB. The winners did this with 20-30 submissions and chose OOF AUC against stronger independent labels.
+14. **Supervise where the signal is.** Study-level labels leave the model hunting for a lesion. Box labels (ROI and lesion) let it pool features where the finding is.
+15. **Use every text source as a target too.** The winners trained the model to predict a report embedding, which costs nothing at inference.
+16. **Judge labels by log loss and confident errors,** not only AUC. Labels with similar AUC differed 2x in confident errors.
 
 ## ML concepts used
 - **AUC:** depends only on the ranking within each finding. Rank-blend families so no model's probability scale dominates.
