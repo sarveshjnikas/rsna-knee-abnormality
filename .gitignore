@@ -25,6 +25,6 @@ runs/
 
 # Kaggle upload staging
 kaggle/.build/
-docs/radiology/cases/
-docs/radiology/cases2/
+docs/archive/radiology/cases/
+docs/archive/radiology/cases2/
 weights_dl/
