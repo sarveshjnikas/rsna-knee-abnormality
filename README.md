@@ -29,7 +29,7 @@ Each study is one patient's knee MRI: several DICOM series (sagittal, coronal an
 ## Approach
 
 ```mermaid
-flowchart LR
+flowchart TD
     R[Radiology reports<br/>4,349 studies] --> L[LLM labeller<br/>5-state extraction]
     L --> M[State → soft label<br/>mapping]
     M --> ST{Self-training<br/>mix with teacher OOF}
