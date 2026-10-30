@@ -60,3 +60,7 @@ uv run pytest
 ```
 
 Competition data goes in `data/raw/` and is not included. Pipeline commands are in [docs/approach.md](docs/approach.md#running-it).
+
+## License
+
+Code is under the [MIT License](LICENSE). Competition data and the 1st-place labels are not included and keep their own licenses.
